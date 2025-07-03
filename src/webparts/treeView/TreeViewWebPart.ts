@@ -7,7 +7,9 @@ import {
   IPropertyPaneConfiguration,
   PropertyPaneTextField,
   PropertyPaneDropdown,
-  IPropertyPaneDropdownOption
+  IPropertyPaneDropdownOption,
+  IPropertyPaneField,
+  PropertyPaneToggle
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
@@ -22,6 +24,10 @@ import { initializeIcons } from '@fluentui/react';
 export interface ITreeViewWebPartProps {
   description: string;
   selectedLibraryUrl?: string;
+  selectedLibraryTitle?: string;
+  metadataColumn1?: string;
+  metadataColumn2?: string;
+  metadataColumn3?: string;
 }
 
 export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebPartProps> {
@@ -30,6 +36,8 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
   private _environmentMessage: string = '';
 
   private _documentLibraryOptions: IPropertyPaneDropdownOption[] = [];
+  private _metadataColumnOptions: IPropertyPaneDropdownOption[] = [];
+
 
   public render(): void {
     const element: React.ReactElement<ITreeViewProps> = React.createElement(
@@ -41,7 +49,11 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
         hasTeamsContext: !!this.context.sdks.microsoftTeams,
         userDisplayName: this.context.pageContext.user.displayName,
         context: this.context,
-        selectedLibraryUrl: this.properties.selectedLibraryUrl
+        selectedLibraryUrl: this.properties.selectedLibraryUrl,
+        selectedLibraryTitle: this.properties.selectedLibraryTitle,
+        metadataColumn1: this.properties.metadataColumn1,
+        metadataColumn2: this.properties.metadataColumn2,
+        metadataColumn3: this.properties.metadataColumn3,
       }
     );
 
@@ -50,7 +62,6 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
 
   protected onInit(): Promise<void> {
     this._environmentMessage = this._getEnvironmentMessage();
-
     return super.onInit().then(_ => {
       pnp.setup({
         spfxContext: this.context
@@ -59,10 +70,8 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     });
   }
 
-  // Correção aqui: Remove as referências a 'loadingElement'
   protected async onPropertyPaneConfigurationStart(): Promise<void> {
-    // this.context.propertyPane.loadingElement.innerHTML = 'Carregando bibliotecas de documentos...'; // <-- REMOVIDO
-
+    // Carrega opções de bibliotecas
     try {
       const libraries = await pnp.sp.web.lists
                                     .filter("BaseTemplate eq 101 and Hidden eq false")
@@ -78,16 +87,71 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     } catch (error) {
       console.error("Erro ao carregar opções de biblioteca:", error);
       this._documentLibraryOptions = [{ key: "error", text: "Erro ao carregar bibliotecas" }];
-    } finally {
-      // this.context.propertyPane.loadingElement.innerHTML = ''; // <-- REMOVIDO
-      this.context.propertyPane.refresh(); // O PropertyPane já tem um spinner de carregamento automático
     }
+
+    // Carrega opções de colunas APENAS SE UMA BIBLIOTECA FOI SELECIONADA
+    if (this.properties.selectedLibraryUrl) {
+      try {
+        const currentList = (await pnp.sp.web.lists
+                                        .filter(`RootFolder/ServerRelativeUrl eq '${this.properties.selectedLibraryUrl}'`)
+                                        .select("Id")
+                                        .get()
+                                    )[0];
+
+        if (currentList && currentList.Id) {
+          // ----> CORREÇÃO AQUI: SIMPLIFICAÇÃO DO FILTRO DE CAMPOS NO LADO DO SERVIDOR E FILTRAGEM NO LADO DO CLIENTE
+          const rawListFields = await pnp.sp.web.lists.getById(currentList.Id)
+                                           .fields
+                                           .filter("Hidden eq false and ReadOnlyField eq false") // Apenas um filtro básico no servidor
+                                           .select("InternalName", "Title", "TypeAsString") // Seleciona TypeAsString para filtrar no cliente
+                                           .get();
+
+          // Filtra os campos no lado do cliente com base nos tipos desejados
+          const allowedTypes = ['Text', 'Note', 'Number', 'Integer', 'DateTime', 'Boolean', 'Choice', 'MultiChoice', 'Lookup', 'User', 'ManagedMetadata'];
+          this._metadataColumnOptions = rawListFields
+            .filter(field => allowedTypes.includes(field.TypeAsString))
+            .map(field => ({
+              key: field.InternalName,
+              text: field.Title
+            }));
+
+          // Adiciona uma opção para "Nenhum" / "Sem Coluna"
+          this._metadataColumnOptions.unshift({ key: "", text: "(Nenhuma Coluna)" });
+
+        } else {
+            this._metadataColumnOptions = [{ key: "", text: "Biblioteca selecionada não encontrada ou sem ID." }];
+        }
+
+      } catch (error) {
+        console.error("Erro ao carregar opções de colunas da biblioteca:", error);
+        this._metadataColumnOptions = [{ key: "error", text: "Erro ao carregar colunas" }];
+      }
+    } else {
+      this._metadataColumnOptions = [{ key: "", text: "Selecione uma biblioteca primeiro" }];
+    }
+
+    this.context.propertyPane.refresh();
   }
 
   protected onPropertyPaneFieldChanged(propertyPath: string, oldValue: any, newValue: any): void {
     super.onPropertyPaneFieldChanged(propertyPath, oldValue, newValue);
 
-    if (propertyPath === 'selectedLibraryUrl' && newValue) {
+    if (propertyPath === 'selectedLibraryUrl' && newValue !== oldValue) {
+      const selectedOption = this._documentLibraryOptions.find(option => option.key === newValue);
+      if (selectedOption) {
+          this.properties.selectedLibraryTitle = selectedOption.text as string;
+      } else {
+          this.properties.selectedLibraryTitle = undefined;
+      }
+      this.onPropertyPaneConfigurationStart();
+    }
+
+    if (propertyPath === 'selectedLibraryUrl' ||
+        propertyPath === 'metadataColumn1' ||
+        propertyPath === 'metadataColumn2' ||
+        propertyPath === 'metadataColumn3' ||
+        propertyPath === 'description'
+      ) {
         this.render();
     }
   }
@@ -100,9 +164,7 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
   }
 
   protected onThemeChanged(currentTheme: IReadonlyTheme | undefined): void {
-    if (!currentTheme) {
-      return;
-    }
+    if (!currentTheme) { return; }
     this._isDarkTheme = !!currentTheme.isInverted;
     const { semanticColors } = currentTheme;
     if (semanticColors) {
@@ -121,12 +183,15 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
   }
 
   protected getPropertyPaneConfiguration(): IPropertyPaneConfiguration {
+    const disableColumnDropdowns = !this.properties.selectedLibraryUrl || this._metadataColumnOptions.length === 0 || (this._metadataColumnOptions.length === 1 && this._metadataColumnOptions[0].key === "");
+
+    const pnpV1SafeFields = this._metadataColumnOptions.filter(opt => opt.key !== "error" && opt.key !== "" && opt.key !== "Biblioteca selecionada não encontrada ou sem ID.");
+
+
     return {
       pages: [
         {
-          header: {
-            description: strings.PropertyPaneDescription
-          },
+          header: { description: strings.PropertyPaneDescription },
           groups: [
             {
               groupName: strings.BasicGroupName,
@@ -138,8 +203,25 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
                   label: 'Selecionar Biblioteca',
                   options: this._documentLibraryOptions,
                   selectedKey: this.properties.selectedLibraryUrl,
-                  // placeholder: 'Selecione uma biblioteca...', // <-- REMOVIDO
                   disabled: this._documentLibraryOptions.length === 0
+                }),
+                PropertyPaneDropdown('metadataColumn1', {
+                  label: 'Coluna de Metadados - Nível 1',
+                  options: pnpV1SafeFields,
+                  selectedKey: this.properties.metadataColumn1,
+                  disabled: disableColumnDropdowns
+                }),
+                PropertyPaneDropdown('metadataColumn2', {
+                  label: 'Coluna de Metadados - Nível 2',
+                  options: pnpV1SafeFields,
+                  selectedKey: this.properties.metadataColumn2,
+                  disabled: disableColumnDropdowns || !this.properties.metadataColumn1
+                }),
+                PropertyPaneDropdown('metadataColumn3', {
+                  label: 'Coluna de Metadados - Nível 3',
+                  options: pnpV1SafeFields,
+                  selectedKey: this.properties.metadataColumn3,
+                  disabled: disableColumnDropdowns || !this.properties.metadataColumn2
                 })
               ]
             }

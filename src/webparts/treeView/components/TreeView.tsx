@@ -2,34 +2,35 @@
 
 import * as React from 'react';
 import styles from './TreeView.module.scss';
-import { ITreeViewProps } from './ITreeViewProps'; // Sua interface de props
+import { ITreeViewProps } from './ITreeViewProps';
 
-// Importações do PnP.js v1
 import pnp from "sp-pnp-js";
-// Removido o import "@pnp/sp/lists"; pois o método problemático não é mais usado aqui
 
-// Para tipagem do contexto
-import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { escape } from '@microsoft/sp-lodash-subset';
 
 
-// Interfaces para a estrutura da árvore (nós)
+// --- Interfaces para a estrutura da árvore (nós) ---
 interface ITreeNode {
-  key: string; // Identificador único para o nó
-  label: string; // Texto a ser exibido no nó
-  icon?: string; // Nome do ícone Fluent UI (ex: 'Folder', 'Document')
-  url?: string; // URL do documento (se for um arquivo)
-  isFolder: boolean; // Indica se é uma pasta ou arquivo
-  children?: ITreeNode[]; // Subnós (pastas/arquivos dentro)
-  isExpanded?: boolean; // Estado de expansão do nó (para pastas)
-  serverRelativeUrl?: string; // URL relativa ao servidor (usada para buscar subitens)
+  key: string;
+  label: string;
+  icon?: string;
+  url?: string;
+  isFolder: boolean; // True para nós de metadados/biblioteca, False para documentos
+  children?: ITreeNode[];
+  isExpanded?: boolean;
+  serverRelativeUrl?: string;
+  columnInternalName?: string;
+  columnValue?: string;
+  level: number;
+  filterQuery?: string;
 }
 
 // Interface para o estado interno do componente TreeView
 interface IComponentTreeViewState {
-  treeData: ITreeNode[]; // Os dados da árvore
-  loading: boolean; // Indicador de carregamento
-  error: string; // Mensagem de erro, se houver
+  treeData: ITreeNode[];
+  loading: boolean;
+  error: string;
+  allDocumentsCache: any[];
 }
 
 export default class TreeView extends React.Component<ITreeViewProps, IComponentTreeViewState> {
@@ -37,110 +38,229 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     super(props);
     this.state = {
       treeData: [],
-      loading: true, // Começa carregando, mas pode mudar dependendo se uma URL é passada
-      error: ""
+      loading: true,
+      error: "",
+      allDocumentsCache: []
     };
   }
 
   public async componentDidMount(): Promise<void> {
-    // Carrega a biblioteca selecionada se houver uma URL, senão exibe uma mensagem
-    if (this.props.selectedLibraryUrl) {
-      await this.loadSelectedLibraryContents(this.props.selectedLibraryUrl, this.props.selectedLibraryTitle || "Biblioteca");
-    } else {
+    await this.loadTreeData();
+  }
+
+  public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
+    if (this.props.selectedLibraryUrl !== prevProps.selectedLibraryUrl ||
+        this.props.metadataColumn1 !== prevProps.metadataColumn1 ||
+        this.props.metadataColumn2 !== prevProps.metadataColumn2 ||
+        this.props.metadataColumn3 !== prevProps.metadataColumn3) {
+      await this.loadTreeData();
+    }
+  }
+
+  private async loadTreeData(): Promise<void> {
+    const { selectedLibraryUrl, selectedLibraryTitle, metadataColumn1, metadataColumn2, metadataColumn3 } = this.props;
+
+    if (!selectedLibraryUrl) {
       this.setState({
         loading: false,
         error: "Por favor, selecione uma biblioteca de documentos nas configurações da Web Part."
       });
+      return;
     }
-  }
 
-  // Chamado quando as propriedades do componente são atualizadas (ex: usuário seleciona outra biblioteca)
-  public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
-    if (this.props.selectedLibraryUrl !== prevProps.selectedLibraryUrl) {
-      if (this.props.selectedLibraryUrl) {
-        await this.loadSelectedLibraryContents(this.props.selectedLibraryUrl, this.props.selectedLibraryTitle || "Biblioteca");
-      } else {
-        // Se a seleção foi limpa ou não há seleção, limpa a árvore e exibe mensagem
-        this.setState({
-          treeData: [],
-          loading: false,
-          error: "Por favor, selecione uma biblioteca de documentos nas configurações da Web Part."
-        });
-      }
-    }
-  }
+    this.setState({ loading: true, error: "" });
 
-  // NOVO MÉTODO: Carrega o conteúdo de UMA biblioteca selecionada
-  // Agora recebe o título diretamente
-  private async loadSelectedLibraryContents(libraryUrl: string, libraryTitle: string): Promise<void> {
     try {
-      this.setState({ loading: true, error: "" });
-
-      // REMOVIDA A LINHA QUE CAUSAVA O ERRO (getByRootFolderServerRelativeUrl)
-      // Usaremos o título (libraryTitle) e a URL (libraryUrl) passados como propriedades diretamente.
-
-      // Obtém os conteúdos da pasta raiz da biblioteca (pastas e arquivos de 1º nível)
-      const rootContents = await this.getFolderContents(libraryUrl); // Reutiliza o método existente
-
-      // Cria o nó raiz para a biblioteca selecionada
       const libraryRootNode: ITreeNode = {
-        key: libraryUrl, // Usar a URL como chave, já que o ID da lista não está sendo buscado aqui
-        label: libraryTitle,
-        icon: "Library", // Ícone para bibliotecas
+        key: selectedLibraryUrl,
+        label: selectedLibraryTitle || "Biblioteca Selecionada",
+        icon: "Library",
         isFolder: true,
-        serverRelativeUrl: libraryUrl,
-        children: rootContents, // Os filhos já são carregados no primeiro nível
-        isExpanded: true // Expande a biblioteca automaticamente na carga inicial
+        serverRelativeUrl: selectedLibraryUrl,
+        children: [],
+        isExpanded: true,
+        level: 0,
+        filterQuery: ""
       };
+
+      const listInfo = (await pnp.sp.web.lists.filter(`RootFolder/ServerRelativeUrl eq '${selectedLibraryUrl}'`).select("Id").get())[0];
+      if (!listInfo || !listInfo.Id) {
+          throw new Error("Não foi possível encontrar a lista para a URL da biblioteca fornecida.");
+      }
+
+      const columnsToProcess = [
+        metadataColumn1,
+        metadataColumn2,
+        metadataColumn3
+      ].filter(Boolean);
+
+      // Adicionado FileSystemObjectType ao final da lista para tentar selecioná-lo (se funcionar)
+      // Se ainda der erro, podemos removê-lo completamente e confiar apenas no FileLeafRef para identificar documentos.
+      const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "FileSystemObjectType"]; // RE-ADICIONADO FileSystemObjectType AQUI
+      const expandStatements: string[] = [];
+
+      columnsToProcess.forEach(colInternalName => {
+        if (!colInternalName) return;
+
+        let selectString = colInternalName;
+        const baseColName = colInternalName.split('/')[0];
+
+        if (colInternalName.includes("/") ||
+            colInternalName.endsWith("Id") ||
+            colInternalName.toLowerCase().includes("lookup") ||
+            colInternalName.toLowerCase().includes("user") ||
+            colInternalName.toLowerCase().includes("person") ||
+            colInternalName.toLowerCase().includes("managedmetadata") ||
+            colInternalName.toLowerCase().includes("editor") ||
+            colInternalName.toLowerCase().includes("author") ||
+            colInternalName.toLowerCase().includes("modifiedby") ||
+            colInternalName.toLowerCase().includes("createdby") ||
+            colInternalName === "TipoNormativo" ||
+            colInternalName === "Area_x0020_Gestora" ||
+            colInternalName === "TituloPT"
+           ) {
+            if (!colInternalName.includes("/") && !colInternalName.endsWith("Id")) {
+                selectString = `${colInternalName}/Title`;
+            } else {
+                selectString = colInternalName;
+            }
+            
+            const expandPart = baseColName;
+            if (!expandStatements.includes(expandPart)) {
+                expandStatements.push(expandPart);
+            }
+        } else {
+            selectString = colInternalName;
+        }
+        
+        finalSelectColumns.push(selectString);
+      });
+      
+      const allItemsInLibrary = await pnp.sp.web.lists.getById(listInfo.Id).items
+                                                   .select(...finalSelectColumns)
+                                                   // Removido .filter("FileSystemObjectType eq 0") daqui
+                                                   .expand(...expandStatements.filter(Boolean))
+                                                   .getAll(); 
+
+      this.setState({ allDocumentsCache: allItemsInLibrary });
+
+      let firstLevelNodes: ITreeNode[] = [];
+      if (metadataColumn1) {
+        firstLevelNodes = this.buildMetadataTreeLevel(
+          1,
+          [],
+          allItemsInLibrary
+        );
+      } else {
+        firstLevelNodes = this.getDocumentsInThisScope(allItemsInLibrary);
+      }
+      libraryRootNode.children = firstLevelNodes;
 
       this.setState({ treeData: [libraryRootNode], loading: false });
 
     } catch (error) {
-      console.error("Erro ao carregar o conteúdo da biblioteca selecionada:", error);
-      this.setState({ error: `Não foi possível carregar a biblioteca selecionada: ${escape(error.message)}`, loading: false, treeData: [] });
+      console.error("Erro ao carregar a árvore de metadados:", error);
+      this.setState({ error: `Erro ao carregar dados: ${escape(error.message)}`, loading: false, treeData: [], allDocumentsCache: [] });
     }
   }
 
-  // Método original para obter o conteúdo de uma pasta (subpastas e arquivos)
-  // Reutilizado por loadSelectedLibraryContents e handleNodeClick
-  private async getFolderContents(folderServerRelativeUrl: string): Promise<ITreeNode[]> {
-    const nodes: ITreeNode[] = [];
-    try {
-      const folderContents = await pnp.sp.web.getFolderByServerRelativeUrl(folderServerRelativeUrl)
-                                   .expand("Folders,Files")
-                                   .get();
-
-      for (const sub of folderContents.Folders) {
-        nodes.push({
-          key: sub.UniqueId,
-          label: sub.Name,
-          icon: "Folder",
-          isFolder: true,
-          serverRelativeUrl: sub.ServerRelativeUrl,
-          children: [],
-          isExpanded: false
-        });
-      }
-
-      for (const file of folderContents.Files) {
-        nodes.push({
-          key: file.UniqueId,
-          label: file.Name,
-          icon: this.getFileIcon(file.Name),
-          isFolder: false,
-          url: file.ServerRelativeUrl,
-          serverRelativeUrl: file.ServerRelativeUrl
-        });
-      }
-
-    } catch (error) {
-      console.error(`Erro ao carregar conteúdo da pasta ${folderServerRelativeUrl}:`, error);
-      // Se houver erro ao carregar conteúdo de uma subpasta, podemos retornar vazia
-    }
-    return nodes;
+  private getDocumentsInThisScope = (documentsInScope: any[]): ITreeNode[] => {
+    // CORREÇÃO AQUI: Filtra por FileLeafRef (presente para arquivos) E FileSystemObjectType (se estiver disponível e for 0)
+    // Se FileSystemObjectType não for selecionável, o filtro doc.FileSystemObjectType === 0 falhará.
+    // A melhor prática é que item.FileLeafRef exista para arquivos, e item.FileRef (o caminho) para ambos.
+    return documentsInScope
+      .filter(doc => doc.FileLeafRef && doc.FileSystemObjectType === 0) // <-- Manter este filtro, mas vamos tentar selecionar FileSystemObjectType
+      .map(doc => ({
+        key: doc.FileRef,
+        label: doc.FileLeafRef,
+        icon: this.getFileIcon(doc.FileLeafRef),
+        url: doc.FileRef,
+        isFolder: false, // É um documento
+        level: 99
+      }));
   }
 
-  private getFileIcon(fileName: string): string {
+
+  private buildMetadataTreeLevel = (
+    currentLevel: number,
+    currentFilters: { column: string; value: string; }[],
+    documentsInScope: any[]
+  ): ITreeNode[] => {
+    const metadataColumns = [
+      this.props.metadataColumn1,
+      this.props.metadataColumn2,
+      this.props.metadataColumn3
+    ].filter(Boolean);
+
+    if (currentLevel > metadataColumns.length) {
+      return this.getDocumentsInThisScope(documentsInScope);
+    }
+
+    const currentColumnInternalName = metadataColumns[currentLevel - 1];
+    if (!currentColumnInternalName) {
+        return [];
+    }
+
+    const uniqueValues = new Set<string>();
+    documentsInScope.forEach(doc => {
+      const fieldValue = this.getFieldValue(doc, currentColumnInternalName);
+      if (fieldValue !== undefined && fieldValue !== null && fieldValue !== "") {
+        uniqueValues.add(String(fieldValue));
+      }
+    });
+
+    return Array.from(uniqueValues).sort().map(value => ({
+      key: `${currentColumnInternalName}-${value}`,
+      label: this.getFriendlyColumnValue(value, currentColumnInternalName),
+      icon: "Tag",
+      isFolder: true,
+      level: currentLevel,
+      columnInternalName: currentColumnInternalName,
+      columnValue: value,
+      children: [],
+      isExpanded: false,
+      filterQuery: this.buildFilterQueryForItems([...currentFilters, { column: currentColumnInternalName, value: value }])
+    }));
+  }
+
+  private getFieldValue = (item: any, internalName: string): any => {
+    if (!item || !internalName) { return undefined; }
+
+    // Tenta acessar diretamente (para Text, Number, Choice, Date, Boolean, FileRef, FileLeafRef)
+    if (item[internalName] !== undefined) {
+        return item[internalName];
+    }
+
+    // Lida com Lookup/Person/Managed Metadata fields expandidos (ex: "MyField/Title")
+    if (internalName.includes('/')) {
+        const [complexFieldName, complexProp] = internalName.split('/');
+        if (item[complexFieldName] && item[complexFieldName][complexProp] !== undefined) {
+            return item[complexFieldName][complexProp];
+        }
+        if (item[complexFieldName] !== undefined && typeof item[complexFieldName] === 'object') {
+            return item[complexFieldName];
+        }
+    }
+    
+    // Tratamento para Managed Metadata que podem vir como string "ID;#TermLabel" se não expandidos via API
+    if (typeof item[internalName] === 'string' && item[internalName].includes(';#')) {
+      const parts = item[internalName].split(';#');
+      if (parts.length > 1) {
+        return parts[parts.length - 1];
+      }
+    }
+    if (item[internalName] && typeof item[internalName] === 'object' && item[internalName].Label) {
+        return item[internalName].Label;
+    }
+
+    if (item[internalName] && typeof item[internalName] === 'object' && item[internalName].Title) {
+        return item[internalName].Title;
+    }
+
+    return undefined;
+  }
+
+  private getFileIcon = (fileName: string): string => {
     const extension = fileName.split('.').pop()?.toLowerCase();
     switch (extension) {
       case 'docx': case 'doc': return 'WordDocument';
@@ -154,25 +274,104 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
-  private handleNodeClick = async (node: ITreeNode): Promise<void> => {
-    if (node.isFolder) {
-      this.setState(prevState => {
-        const newTreeData = this.toggleNodeExpansion(prevState.treeData, node.key);
-        return { treeData: newTreeData };
-      }, async () => {
-        const updatedNode = this.findNodeInTree(this.state.treeData, node.key);
-        if (updatedNode && updatedNode.isExpanded && updatedNode.children && updatedNode.children.length === 0 && updatedNode.serverRelativeUrl) {
-          this.setState({ loading: true });
-          const children = await this.getFolderContents(updatedNode.serverRelativeUrl);
-          this.setState(prevState => {
-            const treeDataWithChildren = this.addChildrenToNode(prevState.treeData, updatedNode.key, children);
-            return { treeData: treeDataWithChildren, loading: false };
-          });
-        }
-      });
-    } else if (node.url) {
-      window.open(node.url, '_blank');
+  private getFriendlyColumnValue = (value: string, internalName: string): string => {
+    if (internalName.toLowerCase().includes("date")) {
+      try {
+        return new Date(value).toLocaleDateString();
+      } catch (e) { /* ignore */ }
     }
+    return value;
+  }
+
+  private getColumnForLevel = (level: number): string | undefined => {
+    switch (level) {
+      case 1: return this.props.metadataColumn1;
+      case 2: return this.props.metadataColumn2;
+      case 3: return this.props.metadataColumn3;
+      default: return undefined;
+    }
+  }
+
+  private buildFilterQueryForItems = (filters: { column: string; value: string; }[]): string => {
+    if (!filters || filters.length === 0) {
+        return "";
+    }
+    const filterParts: string[] = [];
+    filters.forEach(f => {
+        let value = f.value;
+        if (typeof value === 'string' && value.includes("'")) {
+            value = value.replace(/'/g, "''");
+        }
+        
+        filterParts.push(`${f.column} eq '${value}'`);
+    });
+    return filterParts.join(' and ');
+  }
+
+  private handleNodeClick = async (node: ITreeNode): Promise<void> => {
+    if (!node.isFolder) {
+      if (node.url) {
+        window.open(node.url, '_blank');
+      }
+      return;
+    }
+
+    this.setState(prevState => {
+      const newTreeData = this.toggleNodeExpansion(prevState.treeData, node.key);
+      return { treeData: newTreeData };
+    }, async () => {
+      const updatedNode = this.findNodeInTree(this.state.treeData, node.key);
+      if (updatedNode && updatedNode.isExpanded && updatedNode.children && updatedNode.children.length === 0) {
+        this.setState({ loading: true });
+
+        const nextLevel = updatedNode.level + 1;
+        const nextColumnInternalName = this.getColumnForLevel(nextLevel);
+        
+        let children: ITreeNode[] = []; 
+
+        const documentsInScopeForChildren = this.state.allDocumentsCache.filter(doc => {
+            const docFilterQuery = updatedNode.filterQuery;
+            if (!docFilterQuery) return true;
+
+            const filters = docFilterQuery.split(' and ').map(part => {
+                const eqIndex = part.indexOf(' eq ');
+                if (eqIndex > -1) {
+                    const col = part.substring(0, eqIndex);
+                    const val = part.substring(eqIndex + 4).replace(/'/g, '');
+                    return { column: col, value: val };
+                }
+                return { column: '', value: '' };
+            }).filter(f => f.column);
+
+            return filters.every(f => {
+                const fieldValue = this.getFieldValue(doc, f.column);
+                if (typeof fieldValue === 'string' && fieldValue.includes(';#')) {
+                    return fieldValue.split(';#').some(part => part === f.value);
+                }
+                return String(fieldValue) === String(f.value);
+            });
+        });
+
+
+        if (nextColumnInternalName) {
+          children = this.buildMetadataTreeLevel(
+            nextLevel,
+            updatedNode.filterQuery ? updatedNode.filterQuery.split(' and ').map(p => {
+                const [col, val] = p.split(' eq ');
+                return { column: col, value: val.replace(/'/g, '') };
+            }) : [],
+            documentsInScopeForChildren
+          );
+        } else {
+          children = this.getDocumentsInThisScope(documentsInScopeForChildren);
+        }
+
+        this.setState(prevState => {
+          const treeDataWithChildren = this.addChildrenToNode(prevState.treeData, updatedNode.key, children);
+          return { treeData: treeDataWithChildren, loading: false };
+        });
+      }
+    });
   };
 
   private toggleNodeExpansion = (nodes: ITreeNode[], keyToToggle: string): ITreeNode[] => {
@@ -214,6 +413,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
   public render(): React.ReactElement<ITreeViewProps> {
     const { loading, error, treeData } = this.state;
+    const { selectedLibraryUrl, metadataColumn1, metadataColumn2, metadataColumn3 } = this.props;
 
     const renderTreeNodes = (nodes: ITreeNode[]) => {
       return (
@@ -246,7 +446,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     return (
       <section className={`${styles.treeView} ${this.props.hasTeamsContext ? styles.teams : ''}`}>
         <div className={styles.welcome}>
-          <h2>Visualizador de Pastas e Documentos</h2>
+          <h2>Visualizador de Documentos por Metadados</h2>
           <div>Web part property value: <strong>{escape(this.props.description)}</strong></div>
         </div>
         <div className={styles.treeContainer}>
@@ -254,9 +454,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           {error && <p style={{ color: 'red' }}>{error}</p>}
           {!loading && !error && treeData.length === 0 && (
             <p>
-              {this.props.selectedLibraryUrl
-                ? "A biblioteca selecionada não contém pastas ou documentos visíveis, ou ocorreu um erro."
-                : "Por favor, abra as configurações da Web Part e selecione uma biblioteca de documentos."
+              {!selectedLibraryUrl
+                ? "Por favor, abra as configurações da Web Part e selecione uma biblioteca de documentos."
+                : (!metadataColumn1 && !metadataColumn2 && !metadataColumn3)
+                  ? "Nenhuma coluna de metadados selecionada. Exibindo documentos da raiz da biblioteca (se houver)."
+                  : "A biblioteca selecionada não contém documentos com os metadados especificados, ou ocorreu um erro."
               }
             </p>
           )}
