@@ -1,0 +1,123 @@
+// src/webparts/treeView/components/TreeView.module.scss
+
+// Importa as referências de SASS do Office UI Fabric React (Fluent UI)
+@import '~office-ui-fabric-react/dist/sass/References.scss';
+
+.treeView {
+  overflow: hidden; // Limita o conteúdo para não vazar
+  padding: 1em;
+  color: "[theme:bodyText, default: #323130]"; // Variável de tema antiga
+  color: var(--bodyText); // Variável de tema CSS Custom Property
+  font-family: $ms-font-family-fallbacks; // Usa a fonte padrão do Fabric
+
+  // Removido o &.teams daqui
+}
+
+// Estilos específicos para quando a Web Part está no contexto do Teams (AGORA NO NÍVEL SUPERIOR)
+.teams {
+  // Você pode adicionar estilos específicos do Teams aqui, se necessário.
+  // A fonte já está definida em .treeView, mas se precisar de overrides específicos para Teams, coloque aqui.
+  // Exemplo: background-color: "[theme:themeLighter, default:#eff6fc]";
+}
+
+// --- Estilos da Tree View (NOVOS) ---
+.treeContainer {
+  margin-top: 20px;
+  border: 1px solid "[theme:bodyDivider, default:#edebe9]";
+  border: 1px solid var(--bodyDivider);
+  padding: 10px;
+  max-height: 400px; /* Limite a altura para barras de rolagem */
+  overflow-y: auto; /* Adiciona barra de rolagem vertical se o conteúdo exceder */
+  background-color: "[theme:white, default:#ffffff]";
+  background-color: var(--white);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); // Sombra sutil
+}
+
+.treeList {
+  list-style: none; // Remove marcadores de lista padrão
+  padding: 0;
+  margin: 0;
+}
+
+.treeNode {
+  list-style-type: none;
+  margin: 5px 0;
+  cursor: pointer; // Indica que o item é clicável
+  &:hover {
+    background-color: "[theme:neutralLighterAlt, default:#faf9f8]";
+    background-color: var(--neutralLighterAlt);
+  }
+}
+
+.nodeContent {
+  display: flex; // Alinha ícone e texto
+  align-items: center;
+  padding: 2px 0;
+  white-space: nowrap; // Evita quebra de linha
+  overflow: hidden; // Esconde conteúdo que transborda
+  text-overflow: ellipsis; // Adiciona reticências (...) para conteúdo escondido
+}
+
+.expanderIcon {
+  margin-right: 5px;
+  min-width: 10px; // Garante espaço para o ícone de expansão/colapso
+  font-size: 0.8em;
+  color: "[theme:themeSecondary, default:#005e5d]";
+  color: var(--themeSecondary);
+}
+
+.childrenContainer {
+  margin-left: 20px; // Indenta os nós filhos
+  border-left: 1px dotted "[theme:neutralLight, default:#edebe9]";
+  border-left: 1px dotted var(--neutralLight);
+  padding-left: 5px;
+}
+
+.loadingIndicator {
+  margin-left: 20px;
+  font-size: 0.8em;
+  color: "[theme:neutralSecondary, default:#605e5c]";
+  color: var(--neutralSecondary);
+  font-style: italic;
+}
+// --- Fim dos estilos da Tree View ---
+
+.welcome {
+  text-align: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid "[theme:bodyDivider, default:#edebe9]";
+  border-bottom: 1px solid var(--bodyDivider);
+  margin-bottom: 20px;
+  
+  h2 {
+    font-size: 1.8em;
+    margin-bottom: 10px;
+    color: "[theme:themePrimary, default:#0078d4]";
+    color: var(--themePrimary);
+  }
+
+  div {
+    font-size: 0.9em;
+    color: "[theme:bodyText, default:#323130]";
+    color: var(--bodyText);
+  }
+}
+
+.welcomeImage {
+  width: 100%;
+  max-width: 420px;
+}
+
+.links {
+  a {
+    text-decoration: none;
+    color: "[theme:link, default:#03787c]";
+    color: var(--link); // note: CSS Custom Properties support is limited to modern browsers only
+
+    &:hover {
+      text-decoration: underline;
+      color: "[theme:linkHovered, default: #014446]";
+      color: var(--linkHovered); // note: CSS Custom Properties support is limited to modern browsers only
+    }
+  }
+}

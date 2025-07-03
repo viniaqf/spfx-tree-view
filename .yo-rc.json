@@ -1,0 +1,16 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "plusBeta": false,
+    "isCreatingSolution": true,
+    "version": "1.15.0",
+    "libraryName": "tree-view",
+    "libraryId": "0c0ed5f1-dec6-4b06-8e68-433419c6dcc1",
+    "environment": "spo",
+    "packageManager": "npm",
+    "solutionName": "tree-view",
+    "solutionShortDescription": "tree-view description",
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "componentType": "webpart"
+  }
+}
