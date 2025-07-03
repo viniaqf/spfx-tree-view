@@ -10,14 +10,16 @@
   color: var(--bodyText); // Variável de tema CSS Custom Property
   font-family: $ms-font-family-fallbacks; // Usa a fonte padrão do Fabric
 
-  // Removido o &.teams daqui
+  // Removido o &.teams daqui, agora é uma classe de nível superior
 }
 
 // Estilos específicos para quando a Web Part está no contexto do Teams (AGORA NO NÍVEL SUPERIOR)
 .teams {
-  // Você pode adicionar estilos específicos do Teams aqui, se necessário.
-  // A fonte já está definida em .treeView, mas se precisar de overrides específicos para Teams, coloque aqui.
-  // Exemplo: background-color: "[theme:themeLighter, default:#eff6fc]";
+  overflow: hidden; // Limita o conteúdo para não vazar
+  padding: 1em;
+  color: "[theme:bodyText, default: #323130]"; // Variável de tema antiga
+  color: var(--bodyText); // Variável de tema CSS Custom Property
+  font-family: $ms-font-family-fallbacks; // Usa a fonte padrão do Fabric
 }
 
 // --- Estilos da Tree View (NOVOS) ---
@@ -88,7 +90,7 @@
   border-bottom: 1px solid "[theme:bodyDivider, default:#edebe9]";
   border-bottom: 1px solid var(--bodyDivider);
   margin-bottom: 20px;
-  
+
   h2 {
     font-size: 1.8em;
     margin-bottom: 10px;
