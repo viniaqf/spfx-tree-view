@@ -58,7 +58,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   private async loadTreeData(): Promise<void> {
-    const { selectedLibraryUrl, selectedLibraryTitle, metadataColumn1, metadataColumn2, metadataColumn3 } = this.props;
+    const { selectedLibraryUrl, selectedLibraryTitle, metadataColumn1, metadataColumn2, metadataColumn3, metadataColumnTypes } = this.props;
 
     if (!selectedLibraryUrl) {
       this.setState({
@@ -94,51 +94,66 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         metadataColumn3
       ].filter(Boolean);
 
-      // Adicionado FileSystemObjectType ao final da lista para tentar selecioná-lo (se funcionar)
-      // Se ainda der erro, podemos removê-lo completamente e confiar apenas no FileLeafRef para identificar documentos.
-      const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "FileSystemObjectType"]; // RE-ADICIONADO FileSystemObjectType AQUI
+      const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"]; // Mantenho FSObjType aqui para filtro cliente
       const expandStatements: string[] = [];
 
       columnsToProcess.forEach(colInternalName => {
         if (!colInternalName) return;
 
-        let selectString = colInternalName;
-        const baseColName = colInternalName.split('/')[0];
+        let selectString = colInternalName; 
+        let expandPartForThisCol: string | undefined = undefined; 
 
-        if (colInternalName.includes("/") ||
-            colInternalName.endsWith("Id") ||
-            colInternalName.toLowerCase().includes("lookup") ||
-            colInternalName.toLowerCase().includes("user") ||
-            colInternalName.toLowerCase().includes("person") ||
-            colInternalName.toLowerCase().includes("managedmetadata") ||
-            colInternalName.toLowerCase().includes("editor") ||
-            colInternalName.toLowerCase().includes("author") ||
-            colInternalName.toLowerCase().includes("modifiedby") ||
-            colInternalName.toLowerCase().includes("createdby") ||
-            colInternalName === "TipoNormativo" ||
-            colInternalName === "Area_x0020_Gestora" ||
-            colInternalName === "TituloPT"
-           ) {
+        // --- TRATAMENTO ESPECÍFICO PARA 'siglaDoTipoDoNormativo' ---
+        if (colInternalName === "siglaDoTipoDoNormativo") {
+            selectString = `${colInternalName}/Sigla`;
+            expandPartForThisCol = colInternalName; 
+        }
+        // Heurística para campos que terminam em '0' ou '_0' (Managed Metadata Text Field)
+        else if ((colInternalName.endsWith("0") || colInternalName.endsWith("_0")) && !colInternalName.includes("/")) {
+            selectString = colInternalName.substring(0, colInternalName.length - 1); 
+            if (colInternalName.endsWith("_0")) {
+                selectString = colInternalName.substring(0, colInternalName.length - 2);
+            }
+            expandPartForThisCol = selectString; 
+        }
+        // Heurística genérica para outros campos Lookup/Pessoa/Managed Metadata (que não foram tratados acima)
+        else if (colInternalName.includes("/") || 
+                 colInternalName.endsWith("Id") || 
+                 colInternalName.toLowerCase().includes("lookup") ||
+                 colInternalName.toLowerCase().includes("user") ||
+                 colInternalName.toLowerCase().includes("person") ||
+                 colInternalName.toLowerCase().includes("editor") || 
+                 colInternalName.toLowerCase().includes("author") || 
+                 colInternalName.toLowerCase().includes("modifiedby") || 
+                 colInternalName.toLowerCase().includes("createdby") || 
+                 colInternalName.toLowerCase().includes("managedmetadata") ||
+                 colInternalName === "Area_x0020_Gestora" || 
+                 colInternalName === "TituloPT" 
+                ) {
             if (!colInternalName.includes("/") && !colInternalName.endsWith("Id")) {
-                selectString = `${colInternalName}/Title`;
+                selectString = `${colInternalName}/Title`; 
             } else {
                 selectString = colInternalName;
             }
             
-            const expandPart = baseColName;
-            if (!expandStatements.includes(expandPart)) {
-                expandStatements.push(expandPart);
-            }
-        } else {
-            selectString = colInternalName;
+            const baseColNameForExpand = colInternalName.split('/')[0];
+            expandPartForThisCol = baseColNameForExpand;
+        } 
+        // Campos simples
+        else {
+            selectString = colInternalName; 
         }
         
         finalSelectColumns.push(selectString);
+
+        if (expandPartForThisCol && !expandStatements.includes(expandPartForThisCol)) {
+            expandStatements.push(expandPartForThisCol);
+        }
       });
-      
+
       const allItemsInLibrary = await pnp.sp.web.lists.getById(listInfo.Id).items
                                                    .select(...finalSelectColumns)
-                                                   // Removido .filter("FileSystemObjectType eq 0") daqui
+                                                   // REMOVIDO AQUI: .filter("FileSystemObjectType eq 0")
                                                    .expand(...expandStatements.filter(Boolean))
                                                    .getAll(); 
 
@@ -164,18 +179,22 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
+  // --- getDocumentsInThisScope agora filtra SOMENTE no CLIENTE ---
   private getDocumentsInThisScope = (documentsInScope: any[]): ITreeNode[] => {
-    // CORREÇÃO AQUI: Filtra por FileLeafRef (presente para arquivos) E FileSystemObjectType (se estiver disponível e for 0)
-    // Se FileSystemObjectType não for selecionável, o filtro doc.FileSystemObjectType === 0 falhará.
-    // A melhor prática é que item.FileLeafRef exista para arquivos, e item.FileRef (o caminho) para ambos.
     return documentsInScope
-      .filter(doc => doc.FileLeafRef && doc.FileSystemObjectType === 0) // <-- Manter este filtro, mas vamos tentar selecionar FileSystemObjectType
+      // Filtra itens que são documentos:
+      // 1. Possuem FileRef E FileLeafRef (são arquivos, não apenas itens ou pastas sem arquivo)
+      // 2. Têm FSObjType como 0 (padrão de arquivo CAML) OU ContentTypeId que NÃO começa com "0x0120" (padrão de pasta)
+      .filter(doc => 
+        doc.FileRef && doc.FileLeafRef && 
+        (doc.FSObjType === 0 || (doc.ContentTypeId && !doc.ContentTypeId.startsWith("0x0120")))
+      ) 
       .map(doc => ({
         key: doc.FileRef,
         label: doc.FileLeafRef,
-        icon: this.getFileIcon(doc.FileLeafRef),
+        icon: this.getFileIcon(doc.FileLeafRef), 
         url: doc.FileRef,
-        isFolder: false, // É um documento
+        isFolder: false, 
         level: 99
       }));
   }
@@ -205,7 +224,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     documentsInScope.forEach(doc => {
       const fieldValue = this.getFieldValue(doc, currentColumnInternalName);
       if (fieldValue !== undefined && fieldValue !== null && fieldValue !== "") {
-        uniqueValues.add(String(fieldValue));
+        uniqueValues.add(String(fieldValue)); 
       }
     });
 
@@ -216,7 +235,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       isFolder: true,
       level: currentLevel,
       columnInternalName: currentColumnInternalName,
-      columnValue: value,
+      columnValue: value, 
       children: [],
       isExpanded: false,
       filterQuery: this.buildFilterQueryForItems([...currentFilters, { column: currentColumnInternalName, value: value }])
@@ -226,38 +245,77 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   private getFieldValue = (item: any, internalName: string): any => {
     if (!item || !internalName) { return undefined; }
 
-    // Tenta acessar diretamente (para Text, Number, Choice, Date, Boolean, FileRef, FileLeafRef)
-    if (item[internalName] !== undefined) {
-        return item[internalName];
+    const directValue = item[internalName];
+    if (directValue !== undefined) {
+        if (typeof directValue === 'object' && directValue !== null) {
+            if (directValue.Title !== undefined) { return directValue.Title || ""; }
+            if (directValue.Label !== undefined) { return directValue.Label || ""; }
+            if (directValue.LookupValue !== undefined) { return directValue.LookupValue || ""; }
+            // Adicionado: Lógica para campo 'Sigla' (ou outros com nomes específicos)
+            if (directValue.Sigla !== undefined) { return directValue.Sigla || ""; }
+            
+            if (Array.isArray(directValue)) {
+                return directValue.map(val => {
+                    if (val && val.Title !== undefined) return val.Title || "";
+                    if (val && val.Label !== undefined) return val.Label || "";
+                    if (val && val.LookupValue !== undefined) return val.LookupValue || "";
+                    if (val && val.Sigla !== undefined) return val.Sigla || ""; // Para array de objetos
+                    return String(val);
+                }).join('; ');
+            }
+        }
+        if (typeof directValue === 'string' && directValue.includes(';#')) {
+            const parts = directValue.split(';#');
+            if (parts.length > 1) { return parts[parts.length - 1] || ""; }
+        }
+        return directValue;
     }
 
-    // Lida com Lookup/Person/Managed Metadata fields expandidos (ex: "MyField/Title")
     if (internalName.includes('/')) {
         const [complexFieldName, complexProp] = internalName.split('/');
         if (item[complexFieldName] && item[complexFieldName][complexProp] !== undefined) {
-            return item[complexFieldName][complexProp];
+            return item[complexFieldName][complexProp] || "";
         }
         if (item[complexFieldName] !== undefined && typeof item[complexFieldName] === 'object') {
-            return item[complexFieldName];
+            const baseValue = item[complexFieldName];
+            if (baseValue && baseValue.Title !== undefined) { return baseValue.Title || ""; }
+            if (baseValue && baseValue.Label !== undefined) { return baseValue.Label || ""; }
+            if (baseValue && baseValue.LookupValue !== undefined) { return baseValue.LookupValue || ""; }
+            if (baseValue && baseValue.Sigla !== undefined) { return baseValue.Sigla || ""; } // <-- Adicionado
         }
     }
     
-    // Tratamento para Managed Metadata que podem vir como string "ID;#TermLabel" se não expandidos via API
-    if (typeof item[internalName] === 'string' && item[internalName].includes(';#')) {
-      const parts = item[internalName].split(';#');
-      if (parts.length > 1) {
-        return parts[parts.length - 1];
-      }
-    }
-    if (item[internalName] && typeof item[internalName] === 'object' && item[internalName].Label) {
-        return item[internalName].Label;
+    if (internalName.endsWith("Id") && internalName.length > 2 && internalName !== "ID") {
+        const baseFieldName = internalName.substring(0, internalName.length - 2); 
+        if (item[baseFieldName] && typeof item[baseFieldName] === 'object' && item[baseFieldName].Title !== undefined) {
+            return item[baseFieldName].Title || "";
+        }
+        if (item[internalName] !== undefined) { return item[internalName]; } 
     }
 
-    if (item[internalName] && typeof item[internalName] === 'object' && item[internalName].Title) {
-        return item[internalName].Title;
+    if (item.ListItemAllFields && item.ListItemAllFields[internalName] !== undefined) {
+        const liValue = item.ListItemAllFields[internalName];
+        if (typeof liValue === 'object' && liValue !== null) {
+            if (liValue.Title !== undefined) { return liValue.Title || ""; }
+            if (liValue.Label !== undefined) { return liValue.Label || ""; }
+            if (liValue.LookupValue !== undefined) { return liValue.LookupValue || ""; }
+            if (Array.isArray(liValue)) {
+                return liValue.map(val => {
+                    if (val && val.Title !== undefined) return val.Title || "";
+                    if (val && val.Label !== undefined) return val.Label || "";
+                    if (val && val.LookupValue !== undefined) return val.LookupValue || "";
+                    return String(val);
+                }).join('; ');
+            }
+        }
+        if (typeof liValue === 'string' && liValue.includes(';#')) {
+            const parts = liValue.split(';#');
+            if (parts.length > 1) { return parts[parts.length - 1] || ""; }
+        }
+        return liValue || "";
     }
 
-    return undefined;
+    return "";
   }
 
   private getFileIcon = (fileName: string): string => {
@@ -268,8 +326,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       case 'pptx': case 'ppt': return 'PowerPointDocument';
       case 'pdf': return 'PDF';
       case 'jpg': case 'jpeg': case 'png': case 'gif': return 'Photo2';
-      case 'zip': return 'ZipFolder';
-      case 'txt': return 'TextDocument';
+      case 'zip': case 'txt': return 'TextDocument';
       default: return 'Document';
     }
   }

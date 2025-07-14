@@ -28,6 +28,7 @@ export interface ITreeViewWebPartProps {
   metadataColumn1?: string;
   metadataColumn2?: string;
   metadataColumn3?: string;
+  metadataColumnTypes?: { [internalName: string]: string; }; // <-- NOVA PROPRIEDADE
 }
 
 export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebPartProps> {
@@ -37,6 +38,7 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
 
   private _documentLibraryOptions: IPropertyPaneDropdownOption[] = [];
   private _metadataColumnOptions: IPropertyPaneDropdownOption[] = [];
+  private _columnTypesMap: { [internalName: string]: string; } = {}; // Cache interno para o mapa de tipos
 
 
   public render(): void {
@@ -54,6 +56,7 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
         metadataColumn1: this.properties.metadataColumn1,
         metadataColumn2: this.properties.metadataColumn2,
         metadataColumn3: this.properties.metadataColumn3,
+        metadataColumnTypes: this._columnTypesMap, // <-- PASSA O MAPA DE TIPOS
       }
     );
 
@@ -71,7 +74,6 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
   }
 
   protected async onPropertyPaneConfigurationStart(): Promise<void> {
-    // Carrega opções de bibliotecas
     try {
       const libraries = await pnp.sp.web.lists
                                     .filter("BaseTemplate eq 101 and Hidden eq false")
@@ -89,7 +91,6 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
       this._documentLibraryOptions = [{ key: "error", text: "Erro ao carregar bibliotecas" }];
     }
 
-    // Carrega opções de colunas APENAS SE UMA BIBLIOTECA FOI SELECIONADA
     if (this.properties.selectedLibraryUrl) {
       try {
         const currentList = (await pnp.sp.web.lists
@@ -99,27 +100,40 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
                                     )[0];
 
         if (currentList && currentList.Id) {
-          // ----> CORREÇÃO AQUI: SIMPLIFICAÇÃO DO FILTRO DE CAMPOS NO LADO DO SERVIDOR E FILTRAGEM NO LADO DO CLIENTE
           const rawListFields = await pnp.sp.web.lists.getById(currentList.Id)
                                            .fields
-                                           .filter("Hidden eq false and ReadOnlyField eq false") // Apenas um filtro básico no servidor
-                                           .select("InternalName", "Title", "TypeAsString") // Seleciona TypeAsString para filtrar no cliente
+                                           .filter("Hidden eq false and ReadOnlyField eq false")
+                                           .select("InternalName", "Title", "TypeAsString", "Field") //TODO: Verificar se 'Field' é necessário
                                            .get();
 
-          // Filtra os campos no lado do cliente com base nos tipos desejados
           const allowedTypes = ['Text', 'Note', 'Number', 'Integer', 'DateTime', 'Boolean', 'Choice', 'MultiChoice', 'Lookup', 'User', 'ManagedMetadata'];
+          this._columnTypesMap = {}; // Inicializa o mapa de tipos
           this._metadataColumnOptions = rawListFields
             .filter(field => allowedTypes.includes(field.TypeAsString))
-            .map(field => ({
-              key: field.InternalName,
-              text: field.Title
-            }));
+            .map(field => {
+                let correctedInternalName = field.InternalName;
+                // Ajuste para InternalName que terminam em '0'/'_0' para Lookup/ManagedMetadata
+                if ((field.InternalName.endsWith("0") || field.InternalName.endsWith("_0")) &&
+                    (field.TypeAsString === "Lookup" || field.TypeAsString === "ManagedMetadata")
+                   ) {
+                    correctedInternalName = field.InternalName.substring(0, field.InternalName.length - 1); 
+                    if (field.InternalName.endsWith("_0")) { 
+                        correctedInternalName = field.InternalName.substring(0, field.InternalName.length - 2);
+                    }
+                }
+                
+                this._columnTypesMap[correctedInternalName] = field.TypeAsString; // Popula o mapa de tipos
 
-          // Adiciona uma opção para "Nenhum" / "Sem Coluna"
+                return {
+                    key: correctedInternalName,
+                    text: field.Title
+                };
+            });
+
           this._metadataColumnOptions.unshift({ key: "", text: "(Nenhuma Coluna)" });
 
         } else {
-            this._metadataColumnOptions = [{ key: "", text: "Biblioteca selecionada não encontrada ou sem ID." }];
+          this._metadataColumnOptions = [{ key: "", text: "Biblioteca selecionada não encontrada ou sem ID." }];
         }
 
       } catch (error) {
