@@ -128,6 +128,7 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
                     key: correctedInternalName,
                     text: field.Title
                 };
+
             });
 
           this._metadataColumnOptions.unshift({ key: "", text: "(Nenhuma Coluna)" });

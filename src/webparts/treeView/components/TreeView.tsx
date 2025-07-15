@@ -3,19 +3,15 @@
 import * as React from 'react';
 import styles from './TreeView.module.scss';
 import { ITreeViewProps } from './ITreeViewProps';
-
 import pnp from "sp-pnp-js";
-
 import { escape } from '@microsoft/sp-lodash-subset';
 
-
-// --- Interfaces para a estrutura da árvore (nós) ---
 interface ITreeNode {
   key: string;
   label: string;
   icon?: string;
   url?: string;
-  isFolder: boolean; // True para nós de metadados/biblioteca, False para documentos
+  isFolder: boolean;
   children?: ITreeNode[];
   isExpanded?: boolean;
   serverRelativeUrl?: string;
@@ -25,7 +21,6 @@ interface ITreeNode {
   filterQuery?: string;
 }
 
-// Interface para o estado interno do componente TreeView
 interface IComponentTreeViewState {
   treeData: ITreeNode[];
   loading: boolean;
@@ -49,16 +44,24 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
-    if (this.props.selectedLibraryUrl !== prevProps.selectedLibraryUrl ||
-        this.props.metadataColumn1 !== prevProps.metadataColumn1 ||
-        this.props.metadataColumn2 !== prevProps.metadataColumn2 ||
-        this.props.metadataColumn3 !== prevProps.metadataColumn3) {
+    if (
+      this.props.selectedLibraryUrl !== prevProps.selectedLibraryUrl ||
+      this.props.metadataColumn1 !== prevProps.metadataColumn1 ||
+      this.props.metadataColumn2 !== prevProps.metadataColumn2 ||
+      this.props.metadataColumn3 !== prevProps.metadataColumn3
+    ) {
       await this.loadTreeData();
     }
   }
 
   private async loadTreeData(): Promise<void> {
-    const { selectedLibraryUrl, selectedLibraryTitle, metadataColumn1, metadataColumn2, metadataColumn3, metadataColumnTypes } = this.props;
+    const {
+      selectedLibraryUrl,
+      selectedLibraryTitle,
+      metadataColumn1,
+      metadataColumn2,
+      metadataColumn3
+    } = this.props;
 
     if (!selectedLibraryUrl) {
       this.setState({
@@ -83,94 +86,69 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         filterQuery: ""
       };
 
-      const listInfo = (await pnp.sp.web.lists.filter(`RootFolder/ServerRelativeUrl eq '${selectedLibraryUrl}'`).select("Id").get())[0];
-      if (!listInfo || !listInfo.Id) {
-          throw new Error("Não foi possível encontrar a lista para a URL da biblioteca fornecida.");
+      const listInfo = (await pnp.sp.web.lists
+        .filter(`RootFolder/ServerRelativeUrl eq '${selectedLibraryUrl}'`)
+        .select("Id")
+        .get())[0];
+
+      if (!listInfo?.Id) {
+        throw new Error("Não foi possível encontrar a lista para a URL da biblioteca fornecida.");
       }
 
-      const columnsToProcess = [
-        metadataColumn1,
-        metadataColumn2,
-        metadataColumn3
-      ].filter(Boolean);
-
-      const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"]; // Mantenho FSObjType aqui para filtro cliente
+      const columnsToProcess = [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean);
+      const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"];
       const expandStatements: string[] = [];
 
-      columnsToProcess.forEach(colInternalName => {
-        if (!colInternalName) return;
+      columnsToProcess.forEach(col => {
+        if (!col) return;
 
-        let selectString = colInternalName; 
-        let expandPartForThisCol: string | undefined = undefined; 
+        let select = col;
+        let expand: string | undefined;
 
-        // --- TRATAMENTO ESPECÍFICO PARA 'siglaDoTipoDoNormativo' ---
-        if (colInternalName === "siglaDoTipoDoNormativo") {
-            selectString = `${colInternalName}/Sigla`;
-            expandPartForThisCol = colInternalName; 
+        if (col === "siglaDoTipoDoNormativo") {
+          select = `${col}/Sigla`;
+          expand = col;
+        } else if (col === "aplicacaoNormativo") {
+          select = `${col}/DescTipoAplicacaoPT`;
+          expand = col;
+        } else if ((col.endsWith("0") || col.endsWith("_0")) && !col.includes("/")) {
+          select = col.endsWith("_0") ? col.slice(0, -2) : col.slice(0, -1);
+          expand = select;
+        } else if (
+          col.includes("/") ||
+          col.endsWith("Id") ||
+          col.toLowerCase().includes("lookup") ||
+          col.toLowerCase().includes("user") ||
+          col.toLowerCase().includes("person") ||
+          ["Area_x0020_Gestora", "TituloPT"].includes(col)
+        ) {
+          if (!col.includes("/") && !col.endsWith("Id")) {
+            select = `${col}/Title`;
+          }
+          expand = col.split('/')[0];
         }
-        // Heurística para campos que terminam em '0' ou '_0' (Managed Metadata Text Field)
-        else if ((colInternalName.endsWith("0") || colInternalName.endsWith("_0")) && !colInternalName.includes("/")) {
-            selectString = colInternalName.substring(0, colInternalName.length - 1); 
-            if (colInternalName.endsWith("_0")) {
-                selectString = colInternalName.substring(0, colInternalName.length - 2);
-            }
-            expandPartForThisCol = selectString; 
-        }
-        // Heurística genérica para outros campos Lookup/Pessoa/Managed Metadata (que não foram tratados acima)
-        else if (colInternalName.includes("/") || 
-                 colInternalName.endsWith("Id") || 
-                 colInternalName.toLowerCase().includes("lookup") ||
-                 colInternalName.toLowerCase().includes("user") ||
-                 colInternalName.toLowerCase().includes("person") ||
-                 colInternalName.toLowerCase().includes("editor") || 
-                 colInternalName.toLowerCase().includes("author") || 
-                 colInternalName.toLowerCase().includes("modifiedby") || 
-                 colInternalName.toLowerCase().includes("createdby") || 
-                 colInternalName.toLowerCase().includes("managedmetadata") ||
-                 colInternalName === "Area_x0020_Gestora" || 
-                 colInternalName === "TituloPT" 
-                ) {
-            if (!colInternalName.includes("/") && !colInternalName.endsWith("Id")) {
-                selectString = `${colInternalName}/Title`; 
-            } else {
-                selectString = colInternalName;
-            }
-            
-            const baseColNameForExpand = colInternalName.split('/')[0];
-            expandPartForThisCol = baseColNameForExpand;
-        } 
-        // Campos simples
-        else {
-            selectString = colInternalName; 
-        }
-        
-        finalSelectColumns.push(selectString);
 
-        if (expandPartForThisCol && !expandStatements.includes(expandPartForThisCol)) {
-            expandStatements.push(expandPartForThisCol);
+        finalSelectColumns.push(select);
+        if (expand && !expandStatements.includes(expand)) {
+          expandStatements.push(expand);
         }
       });
 
-      const allItemsInLibrary = await pnp.sp.web.lists.getById(listInfo.Id).items
-                                                   .select(...finalSelectColumns)
-                                                   // REMOVIDO AQUI: .filter("FileSystemObjectType eq 0")
-                                                   .expand(...expandStatements.filter(Boolean))
-                                                   .getAll(); 
+      const allItems = await pnp.sp.web.lists.getById(listInfo.Id).items
+        .select(...finalSelectColumns)
+        .expand(...expandStatements)
+        .getAll();
 
-      this.setState({ allDocumentsCache: allItemsInLibrary });
+      this.setState({ allDocumentsCache: allItems });
 
       let firstLevelNodes: ITreeNode[] = [];
       if (metadataColumn1) {
-        firstLevelNodes = this.buildMetadataTreeLevel(
-          1,
-          [],
-          allItemsInLibrary
-        );
+        firstLevelNodes = this.buildMetadataTreeLevel(1, [], allItems);
       } else {
-        firstLevelNodes = this.getDocumentsInThisScope(allItemsInLibrary);
+        firstLevelNodes = this.getDocumentsInThisScope(allItems);
       }
-      libraryRootNode.children = firstLevelNodes;
 
+      libraryRootNode.children = firstLevelNodes;
       this.setState({ treeData: [libraryRootNode], loading: false });
 
     } catch (error) {
@@ -179,166 +157,109 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
-  // --- getDocumentsInThisScope agora filtra SOMENTE no CLIENTE ---
-  private getDocumentsInThisScope = (documentsInScope: any[]): ITreeNode[] => {
-    return documentsInScope
-      // Filtra itens que são documentos:
-      // 1. Possuem FileRef E FileLeafRef (são arquivos, não apenas itens ou pastas sem arquivo)
-      // 2. Têm FSObjType como 0 (padrão de arquivo CAML) OU ContentTypeId que NÃO começa com "0x0120" (padrão de pasta)
-      .filter(doc => 
-        doc.FileRef && doc.FileLeafRef && 
-        (doc.FSObjType === 0 || (doc.ContentTypeId && !doc.ContentTypeId.startsWith("0x0120")))
-      ) 
-      .map(doc => ({
-        key: doc.FileRef,
-        label: doc.FileLeafRef,
-        icon: this.getFileIcon(doc.FileLeafRef), 
-        url: doc.FileRef,
-        isFolder: false, 
-        level: 99
-      }));
-  }
-
+  private getDocumentsInThisScope = (docs: any[]): ITreeNode[] =>
+    docs.filter(doc =>
+      doc.FileRef && doc.FileLeafRef &&
+      (doc.FSObjType === 0 || (doc.ContentTypeId && !doc.ContentTypeId.startsWith("0x0120")))
+    ).map(doc => ({
+      key: doc.FileRef,
+      label: doc.FileLeafRef,
+      icon: this.getFileIcon(doc.FileLeafRef),
+      url: doc.FileRef,
+      isFolder: false,
+      level: 99
+    }));
 
   private buildMetadataTreeLevel = (
     currentLevel: number,
-    currentFilters: { column: string; value: string; }[],
-    documentsInScope: any[]
+    currentFilters: { column: string; value: string }[],
+    docs: any[]
   ): ITreeNode[] => {
-    const metadataColumns = [
-      this.props.metadataColumn1,
-      this.props.metadataColumn2,
-      this.props.metadataColumn3
-    ].filter(Boolean);
+    const columns = [this.props.metadataColumn1, this.props.metadataColumn2, this.props.metadataColumn3].filter(Boolean);
+    if (currentLevel > columns.length) return this.getDocumentsInThisScope(docs);
 
-    if (currentLevel > metadataColumns.length) {
-      return this.getDocumentsInThisScope(documentsInScope);
-    }
+    const col = columns[currentLevel - 1];
+    if (!col) return [];
 
-    const currentColumnInternalName = metadataColumns[currentLevel - 1];
-    if (!currentColumnInternalName) {
-        return [];
-    }
-
-    const uniqueValues = new Set<string>();
-    documentsInScope.forEach(doc => {
-      const fieldValue = this.getFieldValue(doc, currentColumnInternalName);
-      if (fieldValue !== undefined && fieldValue !== null && fieldValue !== "") {
-        uniqueValues.add(String(fieldValue)); 
-      }
+    const unique = new Set<string>();
+    docs.forEach(doc => {
+      const val = this.getFieldValue(doc, col);
+      if (val) unique.add(String(val));
     });
 
-    return Array.from(uniqueValues).sort().map(value => ({
-      key: `${currentColumnInternalName}-${value}`,
-      label: this.getFriendlyColumnValue(value, currentColumnInternalName),
+    return Array.from(unique).sort().map(value => ({
+      key: `${col}-${value}`,
+      label: this.getFriendlyColumnValue(value, col),
       icon: "Tag",
       isFolder: true,
       level: currentLevel,
-      columnInternalName: currentColumnInternalName,
-      columnValue: value, 
+      columnInternalName: col,
+      columnValue: value,
       children: [],
       isExpanded: false,
-      filterQuery: this.buildFilterQueryForItems([...currentFilters, { column: currentColumnInternalName, value: value }])
+      filterQuery: this.buildFilterQueryForItems([...currentFilters, { column: col, value }])
     }));
-  }
+  };
 
-  private getFieldValue = (item: any, internalName: string): any => {
-    if (!item || !internalName) { return undefined; }
+  private getFieldValue = (item: any, name: string): any => {
+    if (!item || !name) return "";
 
-    const directValue = item[internalName];
-    if (directValue !== undefined) {
-        if (typeof directValue === 'object' && directValue !== null) {
-            if (directValue.Title !== undefined) { return directValue.Title || ""; }
-            if (directValue.Label !== undefined) { return directValue.Label || ""; }
-            if (directValue.LookupValue !== undefined) { return directValue.LookupValue || ""; }
-            // Adicionado: Lógica para campo 'Sigla' (ou outros com nomes específicos)
-            if (directValue.Sigla !== undefined) { return directValue.Sigla || ""; }
-            
-            if (Array.isArray(directValue)) {
-                return directValue.map(val => {
-                    if (val && val.Title !== undefined) return val.Title || "";
-                    if (val && val.Label !== undefined) return val.Label || "";
-                    if (val && val.LookupValue !== undefined) return val.LookupValue || "";
-                    if (val && val.Sigla !== undefined) return val.Sigla || ""; // Para array de objetos
-                    return String(val);
-                }).join('; ');
-            }
+    let val = item[name];
+    if (val !== undefined) {
+      if (typeof val === "object" && val !== null) {
+        if (Array.isArray(val)) {
+          return val.map(v =>
+            v?.Title ?? v?.Label ?? v?.LookupValue ?? v?.Sigla ?? String(v)
+          ).join("; ");
         }
-        if (typeof directValue === 'string' && directValue.includes(';#')) {
-            const parts = directValue.split(';#');
-            if (parts.length > 1) { return parts[parts.length - 1] || ""; }
-        }
-        return directValue;
+        return val.Title ?? val.Label ?? val.LookupValue ?? val.Sigla ?? val.DescTipoAplicacaoPT ?? "";
+      }
+
+      if (typeof val === "string" && val.includes(";#")) {
+        const parts = val.split(";#");
+        return parts[parts.length - 1] ?? "";
+      }
+
+      return val;
     }
 
-    if (internalName.includes('/')) {
-        const [complexFieldName, complexProp] = internalName.split('/');
-        if (item[complexFieldName] && item[complexFieldName][complexProp] !== undefined) {
-            return item[complexFieldName][complexProp] || "";
-        }
-        if (item[complexFieldName] !== undefined && typeof item[complexFieldName] === 'object') {
-            const baseValue = item[complexFieldName];
-            if (baseValue && baseValue.Title !== undefined) { return baseValue.Title || ""; }
-            if (baseValue && baseValue.Label !== undefined) { return baseValue.Label || ""; }
-            if (baseValue && baseValue.LookupValue !== undefined) { return baseValue.LookupValue || ""; }
-            if (baseValue && baseValue.Sigla !== undefined) { return baseValue.Sigla || ""; } // <-- Adicionado
-        }
-    }
-    
-    if (internalName.endsWith("Id") && internalName.length > 2 && internalName !== "ID") {
-        const baseFieldName = internalName.substring(0, internalName.length - 2); 
-        if (item[baseFieldName] && typeof item[baseFieldName] === 'object' && item[baseFieldName].Title !== undefined) {
-            return item[baseFieldName].Title || "";
-        }
-        if (item[internalName] !== undefined) { return item[internalName]; } 
+    if (name.includes("/")) {
+      const [base, prop] = name.split("/");
+      return item[base]?.[prop] ??
+             item[base]?.Title ??
+             item[base]?.Label ??
+             item[base]?.LookupValue ??
+             item[base]?.Sigla ??
+             "";
     }
 
-    if (item.ListItemAllFields && item.ListItemAllFields[internalName] !== undefined) {
-        const liValue = item.ListItemAllFields[internalName];
-        if (typeof liValue === 'object' && liValue !== null) {
-            if (liValue.Title !== undefined) { return liValue.Title || ""; }
-            if (liValue.Label !== undefined) { return liValue.Label || ""; }
-            if (liValue.LookupValue !== undefined) { return liValue.LookupValue || ""; }
-            if (Array.isArray(liValue)) {
-                return liValue.map(val => {
-                    if (val && val.Title !== undefined) return val.Title || "";
-                    if (val && val.Label !== undefined) return val.Label || "";
-                    if (val && val.LookupValue !== undefined) return val.LookupValue || "";
-                    return String(val);
-                }).join('; ');
-            }
+    if (name.endsWith("Id") && name !== "ID") {
+      const base = name.slice(0, -2);
+      return item[base]?.Title ?? item[name] ?? "";
+    }
+
+    if (item.ListItemAllFields?.[name] !== undefined) {
+      const li = item.ListItemAllFields[name];
+      if (typeof li === "object" && li !== null) {
+        if (Array.isArray(li)) {
+          return li.map(v => v?.Title ?? v?.Label ?? v?.LookupValue ?? String(v)).join("; ");
         }
-        if (typeof liValue === 'string' && liValue.includes(';#')) {
-            const parts = liValue.split(';#');
-            if (parts.length > 1) { return parts[parts.length - 1] || ""; }
-        }
-        return liValue || "";
+        return li.Title ?? li.Label ?? li.LookupValue ?? "";
+      }
+
+      if (typeof li === "string" && li.includes(";#")) {
+        const parts = li.split(";#");
+        return parts[parts.length - 1] ?? "";
+      }
+
+      return li ?? "";
     }
 
     return "";
   }
 
-  private getFileIcon = (fileName: string): string => {
-    const extension = fileName.split('.').pop()?.toLowerCase();
-    switch (extension) {
-      case 'docx': case 'doc': return 'WordDocument';
-      case 'xlsx': case 'xls': return 'ExcelDocument';
-      case 'pptx': case 'ppt': return 'PowerPointDocument';
-      case 'pdf': return 'PDF';
-      case 'jpg': case 'jpeg': case 'png': case 'gif': return 'Photo2';
-      case 'zip': case 'txt': return 'TextDocument';
-      default: return 'Document';
-    }
-  }
-
-  private getFriendlyColumnValue = (value: string, internalName: string): string => {
-    if (internalName.toLowerCase().includes("date")) {
-      try {
-        return new Date(value).toLocaleDateString();
-      } catch (e) { /* ignore */ }
-    }
-    return value;
-  }
+  private buildFilterQueryForItems = (filters: { column: string; value: string }[]): string =>
+    filters.map(f => `${f.column} eq '${f.value.replace(/'/g, "''")}'`).join(" and ");
 
   private getColumnForLevel = (level: number): string | undefined => {
     switch (level) {
@@ -349,156 +270,110 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
-  private buildFilterQueryForItems = (filters: { column: string; value: string; }[]): string => {
-    if (!filters || filters.length === 0) {
-        return "";
-    }
-    const filterParts: string[] = [];
-    filters.forEach(f => {
-        let value = f.value;
-        if (typeof value === 'string' && value.includes("'")) {
-            value = value.replace(/'/g, "''");
-        }
-        
-        filterParts.push(`${f.column} eq '${value}'`);
-    });
-    return filterParts.join(' and ');
-  }
-
-  private handleNodeClick = async (node: ITreeNode): Promise<void> => {
+  private async handleNodeClick(node: ITreeNode): Promise<void> {
     if (!node.isFolder) {
-      if (node.url) {
-        window.open(node.url, '_blank');
-      }
+      window.open(node.url, '_blank');
       return;
     }
 
-    this.setState(prevState => {
-      const newTreeData = this.toggleNodeExpansion(prevState.treeData, node.key);
-      return { treeData: newTreeData };
-    }, async () => {
-      const updatedNode = this.findNodeInTree(this.state.treeData, node.key);
-      if (updatedNode && updatedNode.isExpanded && updatedNode.children && updatedNode.children.length === 0) {
+    this.setState(prev => ({
+      treeData: this.toggleNodeExpansion(prev.treeData, node.key)
+    }), async () => {
+      const updated = this.findNodeInTree(this.state.treeData, node.key);
+      if (updated && updated.isExpanded && updated.children?.length === 0) {
         this.setState({ loading: true });
 
-        const nextLevel = updatedNode.level + 1;
-        const nextColumnInternalName = this.getColumnForLevel(nextLevel);
-        
-        let children: ITreeNode[] = []; 
+        const nextLevel = updated.level + 1;
+        const column = this.getColumnForLevel(nextLevel);
 
-        const documentsInScopeForChildren = this.state.allDocumentsCache.filter(doc => {
-            const docFilterQuery = updatedNode.filterQuery;
-            if (!docFilterQuery) return true;
+        const filters = updated.filterQuery?.split(" and ").map(f => {
+          const [col, val] = f.split(" eq ");
+          return { column: col, value: val.replace(/'/g, "") };
+        }) ?? [];
 
-            const filters = docFilterQuery.split(' and ').map(part => {
-                const eqIndex = part.indexOf(' eq ');
-                if (eqIndex > -1) {
-                    const col = part.substring(0, eqIndex);
-                    const val = part.substring(eqIndex + 4).replace(/'/g, '');
-                    return { column: col, value: val };
-                }
-                return { column: '', value: '' };
-            }).filter(f => f.column);
+        const scopedDocs = this.state.allDocumentsCache.filter(doc =>
+          filters.every(f => String(this.getFieldValue(doc, f.column)) === f.value)
+        );
 
-            return filters.every(f => {
-                const fieldValue = this.getFieldValue(doc, f.column);
-                if (typeof fieldValue === 'string' && fieldValue.includes(';#')) {
-                    return fieldValue.split(';#').some(part => part === f.value);
-                }
-                return String(fieldValue) === String(f.value);
-            });
-        });
+        const children = column
+          ? this.buildMetadataTreeLevel(nextLevel, filters, scopedDocs)
+          : this.getDocumentsInThisScope(scopedDocs);
 
-
-        if (nextColumnInternalName) {
-          children = this.buildMetadataTreeLevel(
-            nextLevel,
-            updatedNode.filterQuery ? updatedNode.filterQuery.split(' and ').map(p => {
-                const [col, val] = p.split(' eq ');
-                return { column: col, value: val.replace(/'/g, '') };
-            }) : [],
-            documentsInScopeForChildren
-          );
-        } else {
-          children = this.getDocumentsInThisScope(documentsInScopeForChildren);
-        }
-
-        this.setState(prevState => {
-          const treeDataWithChildren = this.addChildrenToNode(prevState.treeData, updatedNode.key, children);
-          return { treeData: treeDataWithChildren, loading: false };
-        });
+        this.setState(prev => ({
+          treeData: this.addChildrenToNode(prev.treeData, node.key, children),
+          loading: false
+        }));
       }
     });
-  };
+  }
 
-  private toggleNodeExpansion = (nodes: ITreeNode[], keyToToggle: string): ITreeNode[] => {
-    return nodes.map(node => {
-      if (node.key === keyToToggle) {
-        return { ...node, isExpanded: !node.isExpanded };
-      }
-      if (node.children) {
-        return { ...node, children: this.toggleNodeExpansion(node.children, keyToToggle) };
-      }
-      return node;
-    });
-  };
+  private toggleNodeExpansion = (nodes: ITreeNode[], key: string): ITreeNode[] =>
+    nodes.map(n => ({
+      ...n,
+      children: n.children ? this.toggleNodeExpansion(n.children, key) : n.children,
+      isExpanded: n.key === key ? !n.isExpanded : n.isExpanded
+    }));
 
-  private addChildrenToNode = (nodes: ITreeNode[], parentKey: string, children: ITreeNode[]): ITreeNode[] => {
-    return nodes.map(node => {
-      if (node.key === parentKey) {
-        return { ...node, children: children };
-      }
-      if (node.children) {
-        return { ...node, children: this.addChildrenToNode(node.children, parentKey, children) };
-      }
-      return node;
-    });
-  };
+  private addChildrenToNode = (nodes: ITreeNode[], key: string, children: ITreeNode[]): ITreeNode[] =>
+    nodes.map(n => ({
+      ...n,
+      children: n.key === key ? children : n.children ? this.addChildrenToNode(n.children, key, children) : n.children
+    }));
 
-  private findNodeInTree = (nodes: ITreeNode[], keyToFind: string): ITreeNode | undefined => {
-    for (const node of nodes) {
-      if (node.key === keyToFind) {
-        return node;
-      }
-      if (node.children) {
-        const found = this.findNodeInTree(node.children, keyToFind);
-        if (found) { return found; }
-      }
+  private findNodeInTree = (nodes: ITreeNode[], key: string): ITreeNode | undefined => {
+    for (const n of nodes) {
+      if (n.key === key) return n;
+      const found = this.findNodeInTree(n.children ?? [], key);
+      if (found) return found;
     }
     return undefined;
-  };
+  }
+
+  private getFileIcon = (name: string): string => {
+    const ext = name.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'doc': case 'docx': return 'WordDocument';
+      case 'xls': case 'xlsx': return 'ExcelDocument';
+      case 'ppt': case 'pptx': return 'PowerPointDocument';
+      case 'pdf': return 'PDF';
+      case 'jpg': case 'jpeg': case 'png': case 'gif': return 'Photo2';
+      case 'zip': case 'txt': return 'TextDocument';
+      default: return 'Document';
+    }
+  }
+
+  private getFriendlyColumnValue = (val: string, name: string): string => {
+    if (name.toLowerCase().includes("date")) {
+      try {
+        return new Date(val).toLocaleDateString();
+      } catch { return val; }
+    }
+    return val;
+  }
 
   public render(): React.ReactElement<ITreeViewProps> {
     const { loading, error, treeData } = this.state;
-    const { selectedLibraryUrl, metadataColumn1, metadataColumn2, metadataColumn3 } = this.props;
 
-    const renderTreeNodes = (nodes: ITreeNode[]) => {
-      return (
-        <ul className={styles.treeList}>
-          {nodes.map(node => (
-            <li key={node.key} className={styles.treeNode}>
-              <div className={styles.nodeContent} onClick={() => this.handleNodeClick(node)}>
-                {node.isFolder && (
-                  <span className={styles.expanderIcon}>
-                    {node.isExpanded ? '▼' : '►'}
-                  </span>
-                )}
-                <i className={`ms-Icon ms-Icon--${node.icon}`} aria-hidden="true" style={{ marginRight: '5px' }}></i>
-                <span>{escape(node.label)}</span>
+    const renderTreeNodes = (nodes: ITreeNode[]) => (
+      <ul className={styles.treeList}>
+        {nodes.map(node => (
+          <li key={node.key} className={styles.treeNode}>
+            <div className={styles.nodeContent} onClick={() => this.handleNodeClick(node)}>
+              {node.isFolder && <span className={styles.expanderIcon}>{node.isExpanded ? "▼" : "►"}</span>}
+              <i className={`ms-Icon ms-Icon--${node.icon}`} aria-hidden="true" style={{ marginRight: 5 }}></i>
+              <span>{escape(node.label)}</span>
+            </div>
+            {node.isFolder && node.isExpanded && (
+              <div className={styles.childrenContainer}>
+                {node.children?.length
+                  ? renderTreeNodes(node.children)
+                  : loading && <div className={styles.loadingIndicator}>Carregando...</div>}
               </div>
-              {node.isFolder && node.isExpanded && node.children && node.children.length > 0 && (
-                <div className={styles.childrenContainer}>
-                  {renderTreeNodes(node.children)}
-                </div>
-              )}
-               {node.isFolder && node.isExpanded && node.children && node.children.length === 0 && loading && (
-                <div className={styles.loadingIndicator}>Carregando...</div>
-              )}
-            </li>
-          ))}
-        </ul>
-      );
-    };
+            )}
+          </li>
+        ))}
+      </ul>
+    );
 
     return (
       <section className={`${styles.treeView} ${this.props.hasTeamsContext ? styles.teams : ''}`}>
@@ -510,20 +385,13 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           {loading && treeData.length === 0 && <p>Carregando...</p>}
           {error && <p style={{ color: 'red' }}>{error}</p>}
           {!loading && !error && treeData.length === 0 && (
-            <p>
-              {!selectedLibraryUrl
-                ? "Por favor, abra as configurações da Web Part e selecione uma biblioteca de documentos."
-                : (!metadataColumn1 && !metadataColumn2 && !metadataColumn3)
-                  ? "Nenhuma coluna de metadados selecionada. Exibindo documentos da raiz da biblioteca (se houver)."
-                  : "A biblioteca selecionada não contém documentos com os metadados especificados, ou ocorreu um erro."
-              }
-            </p>
+            <p>{!this.props.selectedLibraryUrl
+              ? "Por favor, abra as configurações da Web Part e selecione uma biblioteca de documentos."
+              : (!this.props.metadataColumn1 && !this.props.metadataColumn2 && !this.props.metadataColumn3)
+                ? "Nenhuma coluna de metadados selecionada. Exibindo documentos da raiz da biblioteca."
+                : "A biblioteca selecionada não contém documentos com os metadados especificados."}</p>
           )}
-          {!loading && !error && treeData.length > 0 && (
-            <div>
-              {renderTreeNodes(treeData)}
-            </div>
-          )}
+          {!loading && !error && treeData.length > 0 && renderTreeNodes(treeData)}
         </div>
       </section>
     );
