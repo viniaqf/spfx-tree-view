@@ -19,7 +19,7 @@ import TreeView from './components/TreeView';
 import { ITreeViewProps } from './components/ITreeViewProps';
 import pnp from "sp-pnp-js";
 
-import { initializeIcons } from '@fluentui/react';
+import { initializeIcons } from 'office-ui-fabric-react';
 
 export interface ITreeViewWebPartProps {
   description: string;
@@ -158,6 +158,11 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
       } else {
           this.properties.selectedLibraryTitle = undefined;
       }
+      // Limpa as colunas de metadados quando a biblioteca é alterada, evitando problemas de inconsistência
+      this.properties.metadataColumn1 = "";
+      this.properties.metadataColumn2 = "";
+      this.properties.metadataColumn3 = "";
+
       this.onPropertyPaneConfigurationStart();
     }
 

@@ -3,6 +3,7 @@ import styles from './TreeView.module.scss';
 import { ITreeViewProps } from './ITreeViewProps';
 import pnp from "sp-pnp-js";
 import { escape } from '@microsoft/sp-lodash-subset';
+import { Icon } from 'office-ui-fabric-react';
 
 interface ITreeNode {
   key: string;
@@ -355,7 +356,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           <li key={node.key} className={styles.treeNode}>
             <div className={styles.nodeContent} onClick={() => this.handleNodeClick(node)}>
               {node.isFolder && <span className={styles.expanderIcon}>{node.isExpanded ? "▼" : "►"}</span>}
-              <i className={`ms-Icon ms-Icon--${node.icon}`} aria-hidden="true" style={{ marginRight: 5 }}></i>
+              <Icon iconName={node.icon} style={{ marginRight: 5 }} />
               <span>{escape(node.label)}</span>
             </div>
             {node.isFolder && node.isExpanded && (
