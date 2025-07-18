@@ -28,7 +28,7 @@ export interface ITreeViewWebPartProps {
   metadataColumn1?: string;
   metadataColumn2?: string;
   metadataColumn3?: string;
-  metadataColumnTypes?: { [internalName: string]: string; }; // <-- NOVA PROPRIEDADE
+  metadataColumnTypes?: { [internalName: string]: { type: string; lookupField?: string } }; // <-- Tipagem atualizada
 }
 
 export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebPartProps> {
@@ -38,8 +38,7 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
 
   private _documentLibraryOptions: IPropertyPaneDropdownOption[] = [];
   private _metadataColumnOptions: IPropertyPaneDropdownOption[] = [];
-  private _columnTypesMap: { [internalName: string]: string; } = {}; // Cache interno para o mapa de tipos
-
+  private _columnTypesMap: { [internalName: string]: { type: string; lookupField?: string } } = {}; // <-- Tipagem atualizada
 
   public render(): void {
     const element: React.ReactElement<ITreeViewProps> = React.createElement(
@@ -56,7 +55,7 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
         metadataColumn1: this.properties.metadataColumn1,
         metadataColumn2: this.properties.metadataColumn2,
         metadataColumn3: this.properties.metadataColumn3,
-        metadataColumnTypes: this._columnTypesMap, // <-- PASSA O MAPA DE TIPOS
+        metadataColumnTypes: this._columnTypesMap,
       }
     );
 
@@ -103,7 +102,7 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
           const rawListFields = await pnp.sp.web.lists.getById(currentList.Id)
                                            .fields
                                            .filter("Hidden eq false and ReadOnlyField eq false")
-                                           .select("InternalName", "Title", "TypeAsString", "Field") //TODO: Verificar se 'Field' é necessário
+                                           .select("InternalName", "Title", "TypeAsString", "LookupField")
                                            .get();
 
           const allowedTypes = ['Text', 'Note', 'Number', 'Integer', 'DateTime', 'Boolean', 'Choice', 'MultiChoice', 'Lookup', 'User', 'ManagedMetadata'];
@@ -112,7 +111,6 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
             .filter(field => allowedTypes.includes(field.TypeAsString))
             .map(field => {
                 let correctedInternalName = field.InternalName;
-                // Ajuste para InternalName que terminam em '0'/'_0' para Lookup/ManagedMetadata
                 if ((field.InternalName.endsWith("0") || field.InternalName.endsWith("_0")) &&
                     (field.TypeAsString === "Lookup" || field.TypeAsString === "ManagedMetadata")
                    ) {
@@ -122,13 +120,15 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
                     }
                 }
                 
-                this._columnTypesMap[correctedInternalName] = field.TypeAsString; // Popula o mapa de tipos
+                this._columnTypesMap[correctedInternalName] = {
+                  type: field.TypeAsString,
+                  lookupField: field.LookupField || "Title"
+                };
 
                 return {
                     key: correctedInternalName,
                     text: field.Title
                 };
-
             });
 
           this._metadataColumnOptions.unshift({ key: "", text: "(Nenhuma Coluna)" });
@@ -201,7 +201,6 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     const disableColumnDropdowns = !this.properties.selectedLibraryUrl || this._metadataColumnOptions.length === 0 || (this._metadataColumnOptions.length === 1 && this._metadataColumnOptions[0].key === "");
 
     const pnpV1SafeFields = this._metadataColumnOptions.filter(opt => opt.key !== "error" && opt.key !== "" && opt.key !== "Biblioteca selecionada não encontrada ou sem ID.");
-
 
     return {
       pages: [

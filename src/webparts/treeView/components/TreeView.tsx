@@ -1,5 +1,3 @@
-// src/webparts/treeView/components/TreeView.tsx
-
 import * as React from 'react';
 import styles from './TreeView.module.scss';
 import { ITreeViewProps } from './ITreeViewProps';
@@ -60,7 +58,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       selectedLibraryTitle,
       metadataColumn1,
       metadataColumn2,
-      metadataColumn3
+      metadataColumn3,
+      metadataColumnTypes
     } = this.props;
 
     if (!selectedLibraryUrl) {
@@ -105,27 +104,22 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         let select = col;
         let expand: string | undefined;
 
-        if (col === "siglaDoTipoDoNormativo") {
-          select = `${col}/Sigla`;
-          expand = col;
-        } else if (col === "aplicacaoNormativo") {
+        if (col === "aplicacaoNormativo") {
+          // Caso especial — somente para aplicaçãoNormativo, pois ele referencia um ID, que não reconhece o valor de aplicacaoNormativo. Portanto, precisamos especificar a utilização do campo de referência correto para esse caso: "/DescTipoAplicacaoPT".  
           select = `${col}/DescTipoAplicacaoPT`;
           expand = col;
-        } else if ((col.endsWith("0") || col.endsWith("_0")) && !col.includes("/")) {
-          select = col.endsWith("_0") ? col.slice(0, -2) : col.slice(0, -1);
-          expand = select;
-        } else if (
-          col.includes("/") ||
-          col.endsWith("Id") ||
-          col.toLowerCase().includes("lookup") ||
-          col.toLowerCase().includes("user") ||
-          col.toLowerCase().includes("person") ||
-          ["Area_x0020_Gestora", "TituloPT"].includes(col)
-        ) {
-          if (!col.includes("/") && !col.endsWith("Id")) {
-            select = `${col}/Title`;
+        } else {
+          const colMeta = metadataColumnTypes?.[col];
+          if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
+            const field = colMeta.lookupField || "Title";
+            select = `${col}/${field}`;
+            expand = col;
+          } else if ((col.endsWith("0") || col.endsWith("_0")) && !col.includes("/")) {
+            select = col.endsWith("_0") ? col.slice(0, -2) : col.slice(0, -1);
+            expand = select;
+          } else if (col.includes("/")) {
+            expand = col.split("/")[0];
           }
-          expand = col.split('/')[0];
         }
 
         finalSelectColumns.push(select);
@@ -133,6 +127,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           expandStatements.push(expand);
         }
       });
+
 
       const allItems = await pnp.sp.web.lists.getById(listInfo.Id).items
         .select(...finalSelectColumns)
@@ -165,7 +160,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       key: doc.FileRef,
       label: doc.FileLeafRef,
       icon: this.getFileIcon(doc.FileLeafRef),
-      url: doc.FileRef,
+      url: doc.FileRef + `?web=1`,
       isFolder: false,
       level: 99
     }));
@@ -188,7 +183,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     });
 
     return Array.from(unique).sort().map(value => ({
-      key: `${col}-${value}`,
+      key: `${col}-${value}-${currentLevel}-${this.buildFilterQueryForItems([...currentFilters, { column: col, value }])}`,
       label: this.getFriendlyColumnValue(value, col),
       icon: "Tag",
       isFolder: true,
@@ -226,11 +221,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     if (name.includes("/")) {
       const [base, prop] = name.split("/");
       return item[base]?.[prop] ??
-             item[base]?.Title ??
-             item[base]?.Label ??
-             item[base]?.LookupValue ??
-             item[base]?.Sigla ??
-             "";
+        item[base]?.Title ??
+        item[base]?.Label ??
+        item[base]?.LookupValue ??
+        item[base]?.Sigla ??
+        "";
     }
 
     if (name.endsWith("Id") && name !== "ID") {

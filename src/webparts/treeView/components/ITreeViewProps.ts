@@ -15,6 +15,6 @@ export interface ITreeViewProps {
   metadataColumn1?: string; // Coluna de metadados para o Nível 1
   metadataColumn2?: string; // Coluna de metadados para o Nível 2
   metadataColumn3?: string; // Coluna de metadados para o Nível 3
-  metadataColumnTypes?: { [internalName: string]: string; },
+  metadataColumnTypes?: { [internalName: string]: { type: string; lookupField?: string } }; // <-- Atualize para isso
   children?: ReactNode;
 }
