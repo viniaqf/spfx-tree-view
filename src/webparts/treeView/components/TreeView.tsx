@@ -1,9 +1,12 @@
 import * as React from 'react';
-import styles from './TreeView.module.scss';
+import styles from '../components/TreeView.module.scss';
 import { ITreeViewProps } from './ITreeViewProps';
 import pnp from "sp-pnp-js";
 import { escape } from '@microsoft/sp-lodash-subset';
 import { Icon } from 'office-ui-fabric-react';
+import { getTranslations } from '../../../utils/getTranslations';
+
+
 
 interface ITreeNode {
   key: string;
@@ -27,6 +30,7 @@ interface IComponentTreeViewState {
   allDocumentsCache: any[];
 }
 
+const t = getTranslations();
 export default class TreeView extends React.Component<ITreeViewProps, IComponentTreeViewState> {
   constructor(props: ITreeViewProps) {
     super(props);
@@ -66,7 +70,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     if (!selectedLibraryUrl) {
       this.setState({
         loading: false,
-        error: "Por favor, selecione uma biblioteca de documentos nas configurações da Web Part."
+        error: t.noLibrary
       });
       return;
     }
@@ -76,7 +80,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     try {
       const libraryRootNode: ITreeNode = {
         key: selectedLibraryUrl,
-        label: selectedLibraryTitle || "Biblioteca Selecionada",
+        label: selectedLibraryTitle,
         icon: "Library",
         isFolder: true,
         serverRelativeUrl: selectedLibraryUrl,
@@ -92,7 +96,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         .get())[0];
 
       if (!listInfo?.Id) {
-        throw new Error("Não foi possível encontrar a lista para a URL da biblioteca fornecida.");
+        throw new Error(t.error_library_url_not_found);
       }
 
       const columnsToProcess = [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean);
@@ -105,8 +109,13 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         let select = col;
         let expand: string | undefined;
 
+        /*
+        // Caso especial — somente para aplicaçãoNormativo, pois ele referencia um ID, 
+        // que não reconhece o valor de aplicacaoNormativo. Portanto, precisamos especificar a utilização do campo de referência 
+        // correto para esse caso: "/DescTipoAplicacaoPT".  
+        */
+
         if (col === "aplicacaoNormativo") {
-          // Caso especial — somente para aplicaçãoNormativo, pois ele referencia um ID, que não reconhece o valor de aplicacaoNormativo. Portanto, precisamos especificar a utilização do campo de referência correto para esse caso: "/DescTipoAplicacaoPT".  
           select = `${col}/DescTipoAplicacaoPT`;
           expand = col;
         } else {
@@ -148,8 +157,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       this.setState({ treeData: [libraryRootNode], loading: false });
 
     } catch (error) {
-      console.error("Erro ao carregar a árvore de metadados:", error);
-      this.setState({ error: `Erro ao carregar dados: ${escape(error.message)}`, loading: false, treeData: [], allDocumentsCache: [] });
+      this.setState({ error: `${t.error_loading_data} ${escape(error.message)}`, loading: false, treeData: [], allDocumentsCache: [] });
     }
   }
 
@@ -373,19 +381,16 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     return (
       <section className={`${styles.treeView} ${this.props.hasTeamsContext ? styles.teams : ''}`}>
-        <div className={styles.welcome}>
-          <h2>Visualizador de Documentos por Metadados</h2>
-          <div>Web part property value: <strong>{escape(this.props.description)}</strong></div>
-        </div>
+        <p>{t.welcome.replace('{user}', this.props.userDisplayName)}</p>
         <div className={styles.treeContainer}>
-          {loading && treeData.length === 0 && <p>Carregando...</p>}
+          {loading && treeData.length === 0 && <p>{t.loading}</p>}
           {error && <p style={{ color: 'red' }}>{error}</p>}
           {!loading && !error && treeData.length === 0 && (
             <p>{!this.props.selectedLibraryUrl
-              ? "Por favor, abra as configurações da Web Part e selecione uma biblioteca de documentos."
+              ? t.noLibrary
               : (!this.props.metadataColumn1 && !this.props.metadataColumn2 && !this.props.metadataColumn3)
-                ? "Nenhuma coluna de metadados selecionada. Exibindo documentos da raiz da biblioteca."
-                : "A biblioteca selecionada não contém documentos com os metadados especificados."}</p>
+                ? t.noMetadata
+                : t.noDocuments}</p>
           )}
           {!loading && !error && treeData.length > 0 && renderTreeNodes(treeData)}
         </div>

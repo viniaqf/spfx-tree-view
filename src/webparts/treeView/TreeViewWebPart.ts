@@ -44,7 +44,7 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     const element: React.ReactElement<ITreeViewProps> = React.createElement(
       TreeView,
       {
-        description: this.properties.description,
+        //description: this.properties.description,
         isDarkTheme: this._isDarkTheme,
         environmentMessage: this._environmentMessage,
         hasTeamsContext: !!this.context.sdks.microsoftTeams,

@@ -4,7 +4,7 @@ import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { ReactNode } from 'react';
 
 export interface ITreeViewProps {
-  description: string;
+  //description: string;
   isDarkTheme: boolean;
   environmentMessage: string;
   hasTeamsContext: boolean;

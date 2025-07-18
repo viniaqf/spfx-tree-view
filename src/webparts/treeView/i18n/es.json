@@ -1,0 +1,9 @@
+{
+  "welcome": "¡Bienvenido(a), {user}!",
+  "loading": "Cargando...",
+  "noLibrary": "Por favor, abre la configuración de la Web Part y selecciona una biblioteca de documentos.",
+  "noMetadata": "No se seleccionó ninguna columna de metadatos. Mostrando documentos desde la raíz de la biblioteca.",
+  "noDocuments": "La biblioteca seleccionada no contiene documentos con los metadatos especificados.",
+  "error_library_url_not_found": "No se pudo encontrar la lista para la URL de la biblioteca proporcionada.",
+  "error_loading_data": "Error al cargar datos: "
+}
