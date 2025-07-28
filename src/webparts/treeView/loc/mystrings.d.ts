@@ -8,7 +8,7 @@ declare interface ITreeViewWebPartStrings {
   AppTeamsTabEnvironment: string;
 }
 
-declare module 'TreeViewWebPartStrings' {
+declare module "TreeViewWebPartStrings" {
   const strings: ITreeViewWebPartStrings;
   export = strings;
 }

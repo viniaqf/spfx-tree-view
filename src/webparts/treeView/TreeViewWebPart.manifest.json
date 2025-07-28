@@ -4,23 +4,34 @@
   "alias": "TreeViewWebPart",
   "componentType": "WebPart",
 
-         
   "version": "*",
   "manifestVersion": 2,
 
-                                   
   "requiresCustomScript": false,
-  "supportedHosts": ["SharePointWebPart", "TeamsPersonalApp", "TeamsTab", "SharePointFullPage"],
+  "supportedHosts": [
+    "SharePointWebPart",
+    "TeamsPersonalApp",
+    "TeamsTab",
+    "SharePointFullPage"
+  ],
   "supportsThemeVariants": true,
 
-  "preconfiguredEntries": [{
-    "groupId": "5c03119e-3074-46fd-976b-c60198311f70", 
-    "group": { "default": "Other" },
-    "title": { "default": "tree-view" },
-    "description": { "default": "tree-view description" },
-    "officeFabricIconFontName": "Page",
-    "properties": {
-      "description": "tree-view"
+  "preconfiguredEntries": [
+    {
+      "groupId": "5c03119e-3074-46fd-976b-c60198311f70",
+      "group": { "default": "Other" },
+      "title": {
+        "default": "Navegação em três níveis",
+        "es": "Navegación en tres niveles"
+      },
+      "description": {
+        "default": "Exibição hierárquica dos documentos",
+        "es": "Visualización jerárquica de documentos"
+      },
+      "officeFabricIconFontName": "Page",
+      "properties": {
+        "description": "tree-view"
+      }
     }
-  }]
+  ]
 }

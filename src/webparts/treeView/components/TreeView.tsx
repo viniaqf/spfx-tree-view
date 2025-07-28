@@ -4,7 +4,7 @@ import { ITreeViewProps } from './ITreeViewProps';
 import pnp from "sp-pnp-js";
 import { escape } from '@microsoft/sp-lodash-subset';
 import { Icon } from 'office-ui-fabric-react';
-import { getTranslations } from '../../../utils/getTranslations';
+import { getTranslations, getUserLanguage } from '../../../utils/getTranslations';
 
 
 
@@ -115,10 +115,15 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         // correto para esse caso: "/DescTipoAplicacaoPT".  
         */
 
-        if (col === "aplicacaoNormativo") {
+        if (col === "aplicacaoNormativo" && getUserLanguage() === "pt") {
           select = `${col}/DescTipoAplicacaoPT`;
           expand = col;
-        } else {
+        }
+        else if (col == "aplicacaoNormativo" && getUserLanguage() === "es") {
+          select = `${col}/DescTipoAplicacaoES`;
+          expand = col;
+        }
+        else {
           const colMeta = metadataColumnTypes?.[col];
           if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
             const field = colMeta.lookupField || "Title";
@@ -216,7 +221,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
             v?.Title ?? v?.Label ?? v?.LookupValue ?? v?.Sigla ?? String(v)
           ).join("; ");
         }
-        return val.Title ?? val.Label ?? val.LookupValue ?? val.Sigla ?? val.DescTipoAplicacaoPT ?? "";
+        return val.Title ?? val.Label ?? val.LookupValue ?? val.Sigla ?? val.DescTipoAplicacaoPT ?? val.DescTipoAplicacaoES ?? "";
       }
 
       if (typeof val === "string" && val.includes(";#")) {

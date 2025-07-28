@@ -5,5 +5,16 @@
   "noMetadata": "No se seleccionó ninguna columna de metadatos. Mostrando documentos desde la raíz de la biblioteca.",
   "noDocuments": "La biblioteca seleccionada no contiene documentos con los metadatos especificados.",
   "error_library_url_not_found": "No se pudo encontrar la lista para la URL de la biblioteca proporcionada.",
-  "error_loading_data": "Error al cargar datos: "
+  "error_loading_data": "Error al cargar datos: ",
+  "select_library": "Seleccionar biblioteca",
+  "metadata_column_level_1": "Columna de metadatos - Nivel 1",
+  "metadata_column_level_2": "Columna de metadatos - Nivel 2",
+  "metadata_column_level_3": "Columna de metadatos - Nivel 2",
+  "selected_library_not_found_or_missing_id": "Biblioteca seleccionada no encontrada o sin ID.",
+  "select_library_first": "Seleccione una biblioteca primero",
+  "error_loading_columns": "Error al cargar columnas",
+  "error_loading_column_options": "Error al cargar opciones de columnas de la biblioteca:",
+  "no_column": "Ninguna columna",
+  "error_loading_libraries": "Error al cargar bibliotecas",
+  "error_loading_library_options": "Error al cargar opciones de biblioteca"
 }
