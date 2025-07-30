@@ -115,7 +115,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         // correto para esse caso: "/DescTipoAplicacaoPT".  
         */
 
-        if (col === "aplicacaoNormativo" && getUserLanguage() === "pt") {
+        if (col === "aplicacaoNormativo" && getUserLanguage() === "pt") { //Caso o idioma do navegador não seja português ou espanhol, o padrão retornará português.
           select = `${col}/DescTipoAplicacaoPT`;
           expand = col;
         }

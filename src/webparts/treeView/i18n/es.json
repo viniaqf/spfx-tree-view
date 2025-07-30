@@ -9,7 +9,7 @@
   "select_library": "Seleccionar biblioteca",
   "metadata_column_level_1": "Columna de metadatos - Nivel 1",
   "metadata_column_level_2": "Columna de metadatos - Nivel 2",
-  "metadata_column_level_3": "Columna de metadatos - Nivel 2",
+  "metadata_column_level_3": "Columna de metadatos - Nivel 3",
   "selected_library_not_found_or_missing_id": "Biblioteca seleccionada no encontrada o sin ID.",
   "select_library_first": "Seleccione una biblioteca primero",
   "error_loading_columns": "Error al cargar columnas",

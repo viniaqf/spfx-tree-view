@@ -233,24 +233,25 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
   //     : strings.AppSharePointEnvironment;
   // }
 
-  // protected onThemeChanged(currentTheme: IReadonlyTheme | undefined): void {
-  //   if (!currentTheme) {
-  //     return;
-  //   }
-  //   this._isDarkTheme = !!currentTheme.isInverted;
-  //   const { semanticColors } = currentTheme;
-  //   if (semanticColors) {
-  //     this.domElement.style.setProperty(
-  //       "--bodyText",
-  //       semanticColors.bodyText || null
-  //     );
-  //     this.domElement.style.setProperty("--link", semanticColors.link || null);
-  //     this.domElement.style.setProperty(
-  //       "--linkHovered",
-  //       semanticColors.linkHovered || null
-  //     );
-  //   }
-  // }
+  protected onThemeChanged(currentTheme: IReadonlyTheme | undefined): void {
+    //Mantendo esse método para evitar possíveis erros de mudanças futuras.
+    if (!currentTheme) {
+      return;
+    }
+    this._isDarkTheme = !!currentTheme.isInverted;
+    const { semanticColors } = currentTheme;
+    if (semanticColors) {
+      this.domElement.style.setProperty(
+        "--bodyText",
+        semanticColors.bodyText || null
+      );
+      this.domElement.style.setProperty("--link", semanticColors.link || null);
+      this.domElement.style.setProperty(
+        "--linkHovered",
+        semanticColors.linkHovered || null
+      );
+    }
+  }
 
   protected onDispose(): void {
     ReactDom.unmountComponentAtNode(this.domElement);
