@@ -366,7 +366,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   // Substitua o seu método buildIframeUrl atual por este novo:
   private buildIframeUrl(node: ITreeNode): string {
     const siteUrl = this.props.context.pageContext.web.absoluteUrl;
-    const viewId = "07e1628c-f78c-4f26-b17a-14ba78c379f3";
+    //const viewId = "07e1628c-f78c-4f26-b17a-14ba78c379f3";
 
     // Encontra o caminho completo até o nó clicado
     const nodePath = this.findNodePath(this.state.treeData, node.key);
@@ -408,11 +408,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     // Se não houver filtros, retornamos a URL da biblioteca sem filtro
     if (filterParams.length === 0) {
-      return `${siteUrl}/Normativos/Forms/PT.aspx?viewid=${viewId}`;
+      return `${siteUrl}/Normativos/Forms/Menu.aspx.aspx?`;
     }
 
     const filtersQuery = filterParams.join('&');
-    const url = `${siteUrl}/Normativos/Forms/PT.aspx?${filtersQuery}&viewid=${viewId}`;
+    const url = `${siteUrl}/Normativos/Forms/Menu.aspx?${filtersQuery}`;
     console.log("URL do Iframe com filtros concatenados:", url);
     return url;
   }
