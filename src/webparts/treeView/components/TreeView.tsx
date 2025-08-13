@@ -6,8 +6,6 @@ import { escape } from '@microsoft/sp-lodash-subset';
 import { Icon } from 'office-ui-fabric-react';
 import { getTranslations, getUserLanguage } from '../../../utils/getTranslations';
 
-
-
 interface ITreeNode {
   key: string;
   label: string;
@@ -29,7 +27,7 @@ interface IComponentTreeViewState {
   loading: boolean;
   error: string;
   allDocumentsCache: any[];
-  aplicacaoNormativoListId: string | null; // Adicionado para armazenar o ID da lista
+  aplicacaoNormativoListId: string | null;
 }
 
 const t = getTranslations();
@@ -41,7 +39,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       loading: true,
       error: "",
       allDocumentsCache: [],
-      aplicacaoNormativoListId: null // Inicializado como nulo
+      aplicacaoNormativoListId: null
     };
   }
 
@@ -103,11 +101,12 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         throw new Error(t.error_library_url_not_found);
       }
 
-      // Chamada para obter o ID da lista referenciada pela coluna aplicacaoNormativo
-      if (metadataColumn1 === "aplicacaoNormativo" || metadataColumn2 === "aplicacaoNormativo" || metadataColumn3 === "aplicacaoNormativo") {
+      // Buscar ID da lista referenciada pela coluna aplicacaoNormativo
+      if (metadataColumn1 === "aplicacaoNormativo" ||
+        metadataColumn2 === "aplicacaoNormativo" ||
+        metadataColumn3 === "aplicacaoNormativo") {
         await this.getAplicacaoNormativoListId(listInfo.Id);
       }
-
 
       const columnsToProcess = [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean);
       const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"];
@@ -125,19 +124,21 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         // correto para esse caso: "/DescTipoAplicacaoPT".  
         */
 
-        if (col === "aplicacaoNormativo" && getUserLanguage() === "pt") { //Caso o idioma do navegador não seja português ou espanhol, o padrão retornará português.
-          select = `${col}/DescTipoAplicacaoPT`;
+        if (col === "aplicacaoNormativo") {
+          const lang = getUserLanguage();
+          if (lang === "pt") {
+            select = `${col}/Id,${col}/DescTipoAplicacaoPT`;
+          } else if (lang === "es") {
+            select = `${col}/Id,${col}/DescTipoAplicacaoES`;
+          } else {
+            select = `${col}/Id,${col}/DescTipoAplicacaoPT`;
+          }
           expand = col;
-        }
-        else if (col == "aplicacaoNormativo" && getUserLanguage() === "es") {
-          select = `${col}/DescTipoAplicacaoES`;
-          expand = col;
-        }
-        else {
+        } else {
           const colMeta = metadataColumnTypes?.[col];
           if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
             const field = colMeta.lookupField || "Title";
-            select = `${col}/${field}`;
+            select = `${col}/Id,${col}/${field}`;
             expand = col;
           } else if ((col.endsWith("0") || col.endsWith("_0")) && !col.includes("/")) {
             select = col.endsWith("_0") ? col.slice(0, -2) : col.slice(0, -1);
@@ -152,7 +153,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           expandStatements.push(expand);
         }
       });
-
 
       const allItems = await pnp.sp.web.lists.getById(listInfo.Id).items
         .select(...finalSelectColumns)
@@ -188,13 +188,13 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         .get();
 
       if (fieldInfo && fieldInfo.length > 0) {
+        console.log("LookupList (GUID) da lista aplicacaoNormativo:", fieldInfo[0].LookupList);
         this.setState({ aplicacaoNormativoListId: fieldInfo[0].LookupList });
       }
     } catch (error) {
       console.error("Erro ao obter o ID da lista 'aplicacaoNormativo':", error);
     }
   }
-
 
   private getDocumentsInThisScope = (docs: any[]): ITreeNode[] =>
     docs.filter(doc =>
@@ -316,7 +316,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       return;
     }
 
-    // Toggle expansion state
     this.setState(prev => ({
       treeData: this.toggleNodeExpansion(prev.treeData, node.key)
     }), async () => {
@@ -364,23 +363,74 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
+  // Substitua o seu método buildIframeUrl atual por este novo:
   private buildIframeUrl(node: ITreeNode): string {
     const siteUrl = this.props.context.pageContext.web.absoluteUrl;
-    // const listRelativeUrl = '/sites/SNO365-DEV/Normativos';
     const viewId = "07e1628c-f78c-4f26-b17a-14ba78c379f3";
 
-    let filterField = node.columnInternalName;
-    const filterValue = node.columnValue;
+    // Encontra o caminho completo até o nó clicado
+    const nodePath = this.findNodePath(this.state.treeData, node.key);
+    if (!nodePath) {
+      console.error("Caminho do nó não encontrado.");
+      return "";
+    }
 
-    /// Imprime o ID da lista no console, se existir no estado
+    let filterParams: string[] = [];
+    let filterCount = 1;
 
-    console.log("ID da lista aplicacaoNormativo:", this.state.aplicacaoNormativoListId);
+    // Itera sobre o caminho do nó, ignorando o nó raiz (nível 0)
+    for (let i = 1; i < nodePath.length; i++) {
+      const currentPathNode = nodePath[i];
 
+      if (currentPathNode.columnInternalName && currentPathNode.columnValue) {
+        let filterField = currentPathNode.columnInternalName;
+        let filterValue = currentPathNode.columnValue;
 
-    // A URL original já funciona com o nome interno da coluna.
-    const url = `${siteUrl}/Normativos/Forms/PT.aspx?FilterField1=${encodeURIComponent(filterField)}&FilterValue1=${encodeURIComponent(filterValue)}&FilterType1=Lookup&viewid=${viewId}`;
-    console.log("URL do Iframe:", url);
+        // Se o nó atual é para "aplicacaoNormativo", obtenha o ID
+        if (currentPathNode.columnInternalName === "aplicacaoNormativo") {
+          const aplicacaoNormativoId = this.state.allDocumentsCache
+            .find(doc => this.getFieldValue(doc, currentPathNode.columnInternalName) === currentPathNode.columnValue)
+            ?.aplicacaoNormativo?.Id;
+
+          if (aplicacaoNormativoId) {
+            filterValue = aplicacaoNormativoId;
+          }
+        }
+
+        filterParams.push(
+          `FilterField${filterCount}=${encodeURIComponent(filterField)}`,
+          `FilterValue${filterCount}=${encodeURIComponent(filterValue)}`,
+          `FilterType${filterCount}=Lookup` // Presume que todos os filtros são do tipo Lookup
+        );
+        filterCount++;
+      }
+    }
+
+    // Se não houver filtros, retornamos a URL da biblioteca sem filtro
+    if (filterParams.length === 0) {
+      return `${siteUrl}/Normativos/Forms/PT.aspx?viewid=${viewId}`;
+    }
+
+    const filtersQuery = filterParams.join('&');
+    const url = `${siteUrl}/Normativos/Forms/PT.aspx?${filtersQuery}&viewid=${viewId}`;
+    console.log("URL do Iframe com filtros concatenados:", url);
     return url;
+  }
+  // Método auxiliar para encontrar a trilha raiz dos nós da hierarquia, fundamental para fazer a URL do iframe retornar os filtros concatenados.
+  private findNodePath = (nodes: ITreeNode[], key: string, path: ITreeNode[] = []): ITreeNode[] | undefined => {
+    for (const n of nodes) {
+      const newPath = [...path, n];
+      if (n.key === key) {
+        return newPath;
+      }
+      if (n.children && n.children.length > 0) {
+        const foundPath = this.findNodePath(n.children, key, newPath);
+        if (foundPath) {
+          return foundPath;
+        }
+      }
+    }
+    return undefined;
   }
 
   private toggleNodeExpansion = (nodes: ITreeNode[], key: string): ITreeNode[] =>
