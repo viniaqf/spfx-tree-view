@@ -21,6 +21,7 @@ interface ITreeNode {
   columnValue?: string;
   level: number;
   filterQuery?: string;
+  isClicked: boolean;
 }
 
 interface IComponentTreeViewState {
@@ -28,6 +29,7 @@ interface IComponentTreeViewState {
   loading: boolean;
   error: string;
   allDocumentsCache: any[];
+  aplicacaoNormativoListId: string | null; // Adicionado para armazenar o ID da lista
 }
 
 const t = getTranslations();
@@ -38,7 +40,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       treeData: [],
       loading: true,
       error: "",
-      allDocumentsCache: []
+      allDocumentsCache: [],
+      aplicacaoNormativoListId: null // Inicializado como nulo
     };
   }
 
@@ -87,7 +90,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         children: [],
         isExpanded: true,
         level: 0,
-        filterQuery: ""
+        filterQuery: "",
+        isClicked: false
       };
 
       const listInfo = (await pnp.sp.web.lists
@@ -98,6 +102,12 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       if (!listInfo?.Id) {
         throw new Error(t.error_library_url_not_found);
       }
+
+      // Chamada para obter o ID da lista referenciada pela coluna aplicacaoNormativo
+      if (metadataColumn1 === "aplicacaoNormativo" || metadataColumn2 === "aplicacaoNormativo" || metadataColumn3 === "aplicacaoNormativo") {
+        await this.getAplicacaoNormativoListId(listInfo.Id);
+      }
+
 
       const columnsToProcess = [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean);
       const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"];
@@ -166,6 +176,26 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
+  /**
+   * Obtém o ID da lista referenciada pela coluna "aplicacaoNormativo".
+   * @param listId O ID da lista de origem (biblioteca de documentos).
+   */
+  private async getAplicacaoNormativoListId(listId: string): Promise<void> {
+    try {
+      const fieldInfo = await pnp.sp.web.lists.getById(listId).fields
+        .filter(`InternalName eq 'aplicacaoNormativo'`)
+        .select('LookupList')
+        .get();
+
+      if (fieldInfo && fieldInfo.length > 0) {
+        this.setState({ aplicacaoNormativoListId: fieldInfo[0].LookupList });
+      }
+    } catch (error) {
+      console.error("Erro ao obter o ID da lista 'aplicacaoNormativo':", error);
+    }
+  }
+
+
   private getDocumentsInThisScope = (docs: any[]): ITreeNode[] =>
     docs.filter(doc =>
       doc.FileRef && doc.FileLeafRef &&
@@ -174,9 +204,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       key: doc.FileRef,
       label: doc.FileLeafRef,
       icon: this.getFileIcon(doc.FileLeafRef),
-      url: doc.FileRef + `?web=1`,
+      url: doc.FileRef + '?web=1',
       isFolder: false,
-      level: 99
+      level: 99,
+      isClicked: false
     }));
 
   private buildMetadataTreeLevel = (
@@ -206,6 +237,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       columnValue: value,
       children: [],
       isExpanded: false,
+      isClicked: false,
       filterQuery: this.buildFilterQueryForItems([...currentFilters, { column: col, value }])
     }));
   };
@@ -279,12 +311,12 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
-  private async handleNodeClick(node: ITreeNode): Promise<void> {
+  private async handleExpandClick(node: ITreeNode): Promise<void> {
     if (!node.isFolder) {
-      window.open(node.url, '_blank');
       return;
     }
 
+    // Toggle expansion state
     this.setState(prev => ({
       treeData: this.toggleNodeExpansion(prev.treeData, node.key)
     }), async () => {
@@ -314,6 +346,41 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         }));
       }
     });
+  }
+
+  private async handleNodeClick(node: ITreeNode): Promise<void> {
+    if (!node.isFolder) {
+      // Se for um arquivo, abre a URL do documento.
+      if (node.url) {
+        window.open(node.url, '_blank');
+      }
+    } else {
+      // Se for uma pasta, gera a URL do Iframe e a abre.
+      const iframeUrl = this.buildIframeUrl(node);
+      console.log("Iframe URL gerada:", iframeUrl);
+      if (iframeUrl) {
+        window.open(iframeUrl, '_blank');
+      }
+    }
+  }
+
+  private buildIframeUrl(node: ITreeNode): string {
+    const siteUrl = this.props.context.pageContext.web.absoluteUrl;
+    // const listRelativeUrl = '/sites/SNO365-DEV/Normativos';
+    const viewId = "07e1628c-f78c-4f26-b17a-14ba78c379f3";
+
+    let filterField = node.columnInternalName;
+    const filterValue = node.columnValue;
+
+    /// Imprime o ID da lista no console, se existir no estado
+
+    console.log("ID da lista aplicacaoNormativo:", this.state.aplicacaoNormativoListId);
+
+
+    // A URL original já funciona com o nome interno da coluna.
+    const url = `${siteUrl}/Normativos/Forms/PT.aspx?FilterField1=${encodeURIComponent(filterField)}&FilterValue1=${encodeURIComponent(filterValue)}&FilterType1=Lookup&viewid=${viewId}`;
+    console.log("URL do Iframe:", url);
+    return url;
   }
 
   private toggleNodeExpansion = (nodes: ITreeNode[], key: string): ITreeNode[] =>
@@ -367,10 +434,16 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       <ul className={styles.treeList}>
         {nodes.map(node => (
           <li key={node.key} className={styles.treeNode}>
-            <div className={styles.nodeContent} onClick={() => this.handleNodeClick(node)}>
-              {node.isFolder && <span className={styles.expanderIcon}>{node.isExpanded ? "▼" : "►"}</span>}
+            <div className={styles.nodeContent}>
+              {node.isFolder && (
+                <span className={styles.expanderIcon} onClick={() => this.handleExpandClick(node)}>
+                  {node.isExpanded ? "▼" : "►"}
+                </span>
+              )}
               <Icon iconName={node.icon} style={{ marginRight: 5 }} />
-              <span>{escape(node.label)}</span>
+              <span onClick={() => this.handleNodeClick(node)}>
+                {escape(node.label)}
+              </span>
             </div>
             {node.isFolder && node.isExpanded && (
               <div className={styles.childrenContainer}>
