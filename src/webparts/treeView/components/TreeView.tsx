@@ -5,6 +5,7 @@ import pnp from "sp-pnp-js";
 import { escape } from '@microsoft/sp-lodash-subset';
 import { Icon } from 'office-ui-fabric-react';
 import { getTranslations, getUserLanguage } from '../../../utils/getTranslations';
+import IframePreview from './IframePreview';
 
 interface ITreeNode {
   key: string;
@@ -28,6 +29,7 @@ interface IComponentTreeViewState {
   error: string;
   allDocumentsCache: any[];
   aplicacaoNormativoListId: string | null;
+  iframeUrl: string;
 }
 
 const t = getTranslations();
@@ -39,7 +41,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       loading: true,
       error: "",
       allDocumentsCache: [],
-      aplicacaoNormativoListId: null
+      aplicacaoNormativoListId: null,
+      iframeUrl: ""
     };
   }
 
@@ -347,23 +350,24 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     });
   }
 
+
   private async handleNodeClick(node: ITreeNode): Promise<void> {
     if (!node.isFolder) {
-      // Se for um arquivo, abre a URL do documento.
+      // Se for um arquivo, abre a URL do documento em uma nova aba
       if (node.url) {
         window.open(node.url, '_blank');
       }
     } else {
-      // Se for uma pasta, gera a URL do Iframe e a abre.
+      // Se for uma pasta, gera a URL do Iframe e atualiza o estado
       const iframeUrl = this.buildIframeUrl(node);
       console.log("Iframe URL gerada:", iframeUrl);
       if (iframeUrl) {
-        window.open(iframeUrl, '_blank');
+        this.setState({ iframeUrl: iframeUrl });
       }
     }
   }
 
-  // Substitua o seu método buildIframeUrl atual por este novo:
+
   private buildIframeUrl(node: ITreeNode): string {
     const siteUrl = this.props.context.pageContext.web.absoluteUrl;
     //const viewId = "07e1628c-f78c-4f26-b17a-14ba78c379f3";
@@ -478,7 +482,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   public render(): React.ReactElement<ITreeViewProps> {
-    const { loading, error, treeData } = this.state;
+    const { loading, error, treeData, iframeUrl } = this.state;
 
     const renderTreeNodes = (nodes: ITreeNode[]) => (
       <ul className={styles.treeList}>
@@ -508,19 +512,28 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     );
 
     return (
-      <section className={`${styles.treeView} ${this.props.hasTeamsContext ? styles.teams : ''}`}>
-        <p>{t.welcome.replace('{user}', this.props.userDisplayName)}</p>
-        <div className={styles.treeContainer}>
-          {loading && treeData.length === 0 && <p>{t.loading}</p>}
-          {error && <p style={{ color: 'red' }}>{error}</p>}
-          {!loading && !error && treeData.length === 0 && (
-            <p>{!this.props.selectedLibraryUrl
-              ? t.noLibrary
-              : (!this.props.metadataColumn1 && !this.props.metadataColumn2 && !this.props.metadataColumn3)
-                ? t.noMetadata
-                : t.noDocuments}</p>
-          )}
-          {!loading && !error && treeData.length > 0 && renderTreeNodes(treeData)}
+      <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext ? styles.teams : ''}`}>
+        <div className={styles.treeView}> { }
+          <p>{t.welcome.replace('{user}', this.props.userDisplayName)}</p>
+          <div className={styles.treeContainer}>
+            {loading && treeData.length === 0 && <p>{t.loading}</p>}
+            {error && <p style={{ color: 'red' }}>{error}</p>}
+            {!loading && !error && treeData.length === 0 && (
+              <p>{!this.props.selectedLibraryUrl
+                ? t.noLibrary
+                : (!this.props.metadataColumn1 && !this.props.metadataColumn2 && !this.props.metadataColumn3)
+                  ? t.noMetadata
+                  : t.noDocuments}</p>
+            )}
+            {!loading && !error && treeData.length > 0 && renderTreeNodes(treeData)}
+          </div>
+        </div>
+        {/* Componente IframePreview */}
+        <div className={styles.iframeContainer}>
+          <IframePreview
+            url={iframeUrl}
+            listTitle={this.props.selectedLibraryTitle}
+          />
         </div>
       </section>
     );

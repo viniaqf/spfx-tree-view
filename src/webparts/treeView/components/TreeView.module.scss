@@ -1,80 +1,80 @@
 // src/webparts/treeView/components/TreeView.module.scss
 
 // Importa as referências de SASS do Office UI Fabric React (Fluent UI)
-@import '~office-ui-fabric-react/dist/sass/References.scss';
+@import "~office-ui-fabric-react/dist/sass/References.scss";
 
+// Container principal da WebPart
+.treeViewContainer {
+  display: flex;
+  flex-direction: row;
+  width: 100%; // ocupa toda a largura disponível
+  height: calc(
+    100vh - 120px
+  ); // ocupa a altura total da janela, subtraindo o cabeçalho e rodapé.
+  gap: 20px; //
+}
+// Conteúdo da árvore
 .treeView {
-  overflow: hidden; // Limita o conteúdo para não vazar
+  flex: 1; // ocupa o espaço restante
   padding: 1em;
-  color: "[theme:bodyText, default: #323130]"; // Variável de tema antiga
-  color: var(--bodyText); // Variável de tema CSS Custom Property
-  font-family: $ms-font-family-fallbacks; // Usa a fonte padrão do Fabric
-
-  // Removido o &.teams daqui, agora é uma classe de nível superior
+  overflow-y: auto; // rolagem caso fique muito conteúdo
+  color: "[theme:bodyText, default: #323130]";
+  color: var(--bodyText);
+  font-family: $ms-font-family-fallbacks;
 }
-
-// Estilos específicos para quando a Web Part está no contexto do Teams (AGORA NO NÍVEL SUPERIOR)
+// Estilos específicos quando no contexto do Teams
 .teams {
-  overflow: hidden; // Limita o conteúdo para não vazar
-  padding: 1em;
-  color: "[theme:bodyText, default: #323130]"; // Variável de tema antiga
-  color: var(--bodyText); // Variável de tema CSS Custom Property
-  font-family: $ms-font-family-fallbacks; // Usa a fonte padrão do Fabric
+  @extend .treeView;
 }
-
-// --- Estilos da Tree View (NOVOS) ---
+// Caixa que contém a árvore
 .treeContainer {
   margin-top: 20px;
   border: 1px solid "[theme:bodyDivider, default:#edebe9]";
   border: 1px solid var(--bodyDivider);
   padding: 10px;
-  max-height: 400px; /* Limite a altura para barras de rolagem */
-  overflow-y: auto; /* Adiciona barra de rolagem vertical se o conteúdo exceder */
+  max-height: none; // Alterado para não ter altura máxima
+  overflow-y: auto;
   background-color: "[theme:white, default:#ffffff]";
   background-color: var(--white);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); // Sombra sutil
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
-
+// Lista e nós da árvore
 .treeList {
-  list-style: none; // Remove marcadores de lista padrão
+  list-style: none;
   padding: 0;
   margin: 0;
 }
-
 .treeNode {
   list-style-type: none;
   margin: 5px 0;
-  cursor: pointer; // Indica que o item é clicável
+  cursor: pointer;
+
   &:hover {
     background-color: "[theme:neutralLighterAlt, default:#faf9f8]";
     background-color: var(--neutralLighterAlt);
   }
 }
-
 .nodeContent {
-  display: flex; // Alinha ícone e texto
+  display: flex;
   align-items: center;
   padding: 2px 0;
-  white-space: nowrap; // Evita quebra de linha
-  overflow: hidden; // Esconde conteúdo que transborda
-  text-overflow: ellipsis; // Adiciona reticências (...) para conteúdo escondido
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
 .expanderIcon {
   margin-right: 5px;
-  min-width: 10px; // Garante espaço para o ícone de expansão/colapso
+  min-width: 10px;
   font-size: 0.8em;
   color: "[theme:themeSecondary, default:#005e5d]";
   color: var(--themeSecondary);
 }
-
 .childrenContainer {
-  margin-left: 20px; // Indenta os nós filhos
+  margin-left: 20px;
   border-left: 1px dotted "[theme:neutralLight, default:#edebe9]";
   border-left: 1px dotted var(--neutralLight);
   padding-left: 5px;
 }
-
 .loadingIndicator {
   margin-left: 20px;
   font-size: 0.8em;
@@ -82,8 +82,15 @@
   color: var(--neutralSecondary);
   font-style: italic;
 }
-// --- Fim dos estilos da Tree View ---
-
+// Conteúdo do iframe
+.iframeContainer {
+  flex: 3; // Alterado para ocupar mais espaço que a árvore
+  min-width: 300px; // largura mínima
+  height: calc(
+    100vh - 120px
+  ); // ocupa a altura total da janela, subtraindo o cabeçalho e rodapé.
+}
+// Cabeçalho de boas-vindas
 .welcome {
   text-align: center;
   padding-bottom: 20px;
@@ -104,22 +111,21 @@
     color: var(--bodyText);
   }
 }
-
 .welcomeImage {
   width: 100%;
   max-width: 420px;
 }
-
+// Links
 .links {
   a {
     text-decoration: none;
     color: "[theme:link, default:#03787c]";
-    color: var(--link); // note: CSS Custom Properties support is limited to modern browsers only
+    color: var(--link);
 
     &:hover {
       text-decoration: underline;
       color: "[theme:linkHovered, default: #014446]";
-      color: var(--linkHovered); // note: CSS Custom Properties support is limited to modern browsers only
+      color: var(--linkHovered);
     }
   }
 }
