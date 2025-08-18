@@ -438,7 +438,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         filterParams.push(
           `FilterField${filterCount}=${encodeURIComponent(filterField)}`,
           `FilterValue${filterCount}=${encodeURIComponent(filterValue)}`,
-          `FilterType${filterCount}=Lookup` // Presume que todos os filtros são do tipo Lookup
+          `FilterType${filterCount}=Lookup`
         );
         filterCount++;
       }
@@ -446,10 +446,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     // Se não houver filtros, retornamos a URL da biblioteca sem filtro
     if (filterParams.length === 0) {
-      // AJUSTE: havia ".aspx.aspx" duplicado; mantive apenas ".aspx?"
       return `${siteUrl}/Normativos/Forms/Menu.aspx?`;
-      // Se quiser manter o que você escreveu, troque por:
-      // return `${siteUrl}/Normativos/Forms/Menu.aspx.aspx?`;
     }
 
     const filtersQuery = filterParams.join('&');

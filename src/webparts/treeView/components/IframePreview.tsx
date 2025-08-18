@@ -81,13 +81,13 @@ export default function IframePreview(props: IframePreviewProps) {
         setItems(null);
         setFallbackError(null);
 
-        const to = setTimeout(() => {
-            if (!loaded) {
-                // Se não carregou em 4s, considere bloqueado (vamos permitir recarregar manualmente)
-                setIframeBlocked(true);
-            }
-        }, 4000);
-        return () => clearTimeout(to);
+        // const to = setTimeout(() => {
+        //     if (!loaded) {
+        //         // Se não carregou em 15s, considere bloqueado (vamos permitir recarregar manualmente)
+        //         setIframeBlocked(true);
+        //     }
+        // }, 100);
+        // return () => clearTimeout(to);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [url]);
 
