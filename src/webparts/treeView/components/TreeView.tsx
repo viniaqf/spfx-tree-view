@@ -6,6 +6,8 @@ import { escape } from '@microsoft/sp-lodash-subset';
 import { Icon } from 'office-ui-fabric-react';
 import { getTranslations, getUserLanguage } from '../../../utils/getTranslations';
 import IframePreview from './IframePreview';
+import SplitterLayout from 'react-splitter-layout';
+import 'react-splitter-layout/lib/index.css';
 
 interface ITreeNode {
   key: string;
@@ -211,7 +213,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       this.buildTreeFromData(allItems);
 
     } catch (error) {
-      this.setState({ error: `${t.error_loading_data} ${escape(error.message)}`, loading: false, treeData: [], allDocumentsCache: [] });
+      this.setState({ error: `${t.error_loading_data} ${escape((error as any).message)}`, loading: false, treeData: [], allDocumentsCache: [] });
     }
   }
 
@@ -385,7 +387,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     });
   }
 
-
   private async handleNodeClick(node: ITreeNode): Promise<void> {
     if (!node.isFolder) {
       // Se for um arquivo, abre a URL do documento em uma nova aba
@@ -402,10 +403,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
-
   private buildIframeUrl(node: ITreeNode): string {
     const siteUrl = this.props.context.pageContext.web.absoluteUrl;
-    //const viewId = "07e1628c-f78c-4f26-b17a-14ba78c379f3";
 
     // Encontra o caminho completo até o nó clicado
     const nodePath = this.findNodePath(this.state.treeData, node.key);
@@ -447,7 +446,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     // Se não houver filtros, retornamos a URL da biblioteca sem filtro
     if (filterParams.length === 0) {
-      return `${siteUrl}/Normativos/Forms/Menu.aspx.aspx?`;
+      // AJUSTE: havia ".aspx.aspx" duplicado; mantive apenas ".aspx?"
+      return `${siteUrl}/Normativos/Forms/Menu.aspx?`;
+      // Se quiser manter o que você escreveu, troque por:
+      // return `${siteUrl}/Normativos/Forms/Menu.aspx.aspx?`;
     }
 
     const filtersQuery = filterParams.join('&');
@@ -455,6 +457,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     console.log("URL do Iframe com filtros concatenados:", url);
     return url;
   }
+
   // Método auxiliar para encontrar a trilha raiz dos nós da hierarquia, fundamental para fazer a URL do iframe retornar os filtros concatenados.
   private findNodePath = (nodes: ITreeNode[], key: string, path: ITreeNode[] = []): ITreeNode[] | undefined => {
     for (const n of nodes) {
@@ -548,28 +551,37 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     return (
       <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext ? styles.teams : ''}`}>
-        <div className={styles.treeView}> { }
-          <p>{t.welcome.replace('{user}', this.props.userDisplayName)}</p>
-          <div className={styles.treeContainer}>
-            {loading && treeData.length === 0 && <p>{t.loading}</p>}
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            {!loading && !error && treeData.length === 0 && (
-              <p>{!this.props.selectedLibraryUrl
-                ? t.noLibrary
-                : (!this.props.metadataColumn1 && !this.props.metadataColumn2 && !this.props.metadataColumn3)
-                  ? t.noMetadata
-                  : t.noDocuments}</p>
-            )}
-            {!loading && !error && treeData.length > 0 && renderTreeNodes(treeData)}
+        <SplitterLayout
+          percentage
+          primaryInitialSize={30}
+          primaryMinSize={20}
+          secondaryMinSize={20}
+        >
+          {/* Painel esquerdo: Árvore */}
+          <div className={styles.treeView}>
+            <p>{t.welcome.replace('{user}', this.props.userDisplayName)}</p>
+            <div className={styles.treeContainer}>
+              {loading && treeData.length === 0 && <p>{t.loading}</p>}
+              {error && <p style={{ color: 'red' }}>{error}</p>}
+              {!loading && !error && treeData.length === 0 && (
+                <p>{!this.props.selectedLibraryUrl
+                  ? t.noLibrary
+                  : (!this.props.metadataColumn1 && !this.props.metadataColumn2 && !this.props.metadataColumn3)
+                    ? t.noMetadata
+                    : t.noDocuments}</p>
+              )}
+              {!loading && !error && treeData.length > 0 && renderTreeNodes(treeData)}
+            </div>
           </div>
-        </div>
-        {/* Componente IframePreview */}
-        <div className={styles.iframeContainer}>
-          <IframePreview
-            url={iframeUrl}
-            listTitle={this.props.selectedLibraryTitle}
-          />
-        </div>
+
+          {/* Painel direito: IframePreview */}
+          <div className={styles.iframeContainer}>
+            <IframePreview
+              url={iframeUrl}
+              listTitle={this.props.selectedLibraryTitle}
+            />
+          </div>
+        </SplitterLayout>
       </section>
     );
   }

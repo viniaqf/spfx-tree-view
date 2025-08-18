@@ -19,6 +19,7 @@
     "office-ui-fabric-react": "7.185.7",
     "react": "16.13.1",
     "react-dom": "16.13.1",
+    "react-splitter-layout": "^4.0.0",
     "sp-pnp-js": "^3.0.10",
     "tslib": "2.3.1"
   },
