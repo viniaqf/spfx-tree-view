@@ -33,6 +33,7 @@ interface IComponentTreeViewState {
 }
 
 const t = getTranslations();
+
 export default class TreeView extends React.Component<ITreeViewProps, IComponentTreeViewState> {
   constructor(props: ITreeViewProps) {
     super(props);
@@ -47,7 +48,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   public async componentDidMount(): Promise<void> {
-    await this.loadTreeData();
+    await this.checkAndLoadCache();
   }
 
   public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
@@ -57,8 +58,66 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       this.props.metadataColumn2 !== prevProps.metadataColumn2 ||
       this.props.metadataColumn3 !== prevProps.metadataColumn3
     ) {
-      await this.loadTreeData();
+      // Se as propriedades mudaram, limpa o cache e recarrega os dados.
+      sessionStorage.removeItem('treeViewCacheData');
+      await this.checkAndLoadCache();
     }
+  }
+
+  /**
+   * Método para verificar e carregar os dados do cache.
+   * Se o cache não existir ou estiver incompleto, chama a função para buscar os dados.
+   */
+  private async checkAndLoadCache(): Promise<void> {
+    const { metadataColumn1, metadataColumn2, metadataColumn3 } = this.props;
+
+    const cacheKey = 'treeViewCacheData';
+    const cachedData = sessionStorage.getItem(cacheKey);
+
+    if (cachedData) {
+      const parsedData = JSON.parse(cachedData);
+      const cachedColumns = parsedData.columns;
+      const allItems = parsedData.items;
+
+      // Verifica se o cache corresponde aos três níveis de hierarquia atuais
+      const currentColumns = [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean);
+      const cacheIsValid = JSON.stringify(currentColumns.sort()) === JSON.stringify(cachedColumns.sort());
+
+      if (cacheIsValid) {
+        this.setState({ allDocumentsCache: allItems });
+        this.buildTreeFromData(allItems);
+        return;
+      }
+    }
+
+    // Se o cache não for válido, busca os dados da API
+    await this.loadTreeData();
+  }
+
+  private buildTreeFromData(allItems: any[]): void {
+    const { selectedLibraryUrl, selectedLibraryTitle, metadataColumn1 } = this.props;
+    const libraryRootNode: ITreeNode = {
+      key: selectedLibraryUrl,
+      label: selectedLibraryTitle,
+      icon: "Library",
+      isFolder: true,
+      serverRelativeUrl: selectedLibraryUrl,
+      children: [],
+      isExpanded: true,
+      level: 0,
+      filterQuery: "",
+      isClicked: false
+    };
+
+    let firstLevelNodes: ITreeNode[] = [];
+    if (metadataColumn1) {
+      firstLevelNodes = this.buildMetadataTreeLevel(1, [], allItems);
+    } else {
+      firstLevelNodes = this.getDocumentsInThisScope(allItems);
+    }
+
+    libraryRootNode.children = firstLevelNodes;
+    this.setState({ treeData: [libraryRootNode], loading: false, error: "" });
   }
 
   private async loadTreeData(): Promise<void> {
@@ -82,19 +141,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     this.setState({ loading: true, error: "" });
 
     try {
-      const libraryRootNode: ITreeNode = {
-        key: selectedLibraryUrl,
-        label: selectedLibraryTitle,
-        icon: "Library",
-        isFolder: true,
-        serverRelativeUrl: selectedLibraryUrl,
-        children: [],
-        isExpanded: true,
-        level: 0,
-        filterQuery: "",
-        isClicked: false
-      };
-
       const listInfo = (await pnp.sp.web.lists
         .filter(`RootFolder/ServerRelativeUrl eq '${selectedLibraryUrl}'`)
         .select("Id")
@@ -104,7 +150,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         throw new Error(t.error_library_url_not_found);
       }
 
-      // Buscar ID da lista referenciada pela coluna aplicacaoNormativo
       if (metadataColumn1 === "aplicacaoNormativo" ||
         metadataColumn2 === "aplicacaoNormativo" ||
         metadataColumn3 === "aplicacaoNormativo") {
@@ -120,12 +165,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
         let select = col;
         let expand: string | undefined;
-
-        /*
-        // Caso especial — somente para aplicaçãoNormativo, pois ele referencia um ID, 
-        // que não reconhece o valor de aplicacaoNormativo. Portanto, precisamos especificar a utilização do campo de referência 
-        // correto para esse caso: "/DescTipoAplicacaoPT".  
-        */
 
         if (col === "aplicacaoNormativo") {
           const lang = getUserLanguage();
@@ -162,17 +201,14 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         .expand(...expandStatements)
         .getAll();
 
+      // Salva os dados e as colunas usadas no cache
+      sessionStorage.setItem('treeViewCacheData', JSON.stringify({
+        items: allItems,
+        columns: columnsToProcess
+      }));
+
       this.setState({ allDocumentsCache: allItems });
-
-      let firstLevelNodes: ITreeNode[] = [];
-      if (metadataColumn1) {
-        firstLevelNodes = this.buildMetadataTreeLevel(1, [], allItems);
-      } else {
-        firstLevelNodes = this.getDocumentsInThisScope(allItems);
-      }
-
-      libraryRootNode.children = firstLevelNodes;
-      this.setState({ treeData: [libraryRootNode], loading: false });
+      this.buildTreeFromData(allItems);
 
     } catch (error) {
       this.setState({ error: `${t.error_loading_data} ${escape(error.message)}`, loading: false, treeData: [], allDocumentsCache: [] });
@@ -191,7 +227,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         .get();
 
       if (fieldInfo && fieldInfo.length > 0) {
-        console.log("LookupList (GUID) da lista aplicacaoNormativo:", fieldInfo[0].LookupList);
         this.setState({ aplicacaoNormativoListId: fieldInfo[0].LookupList });
       }
     } catch (error) {
