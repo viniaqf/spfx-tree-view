@@ -5,6 +5,7 @@
   "componentType": "WebPart",
 
   "version": "*",
+
   "manifestVersion": 2,
 
   "requiresCustomScript": false,

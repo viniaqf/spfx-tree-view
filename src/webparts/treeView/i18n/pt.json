@@ -16,5 +16,7 @@
   "error_loading_column_options": "Erro ao carregar opções de colunas da biblioteca:",
   "no_column": "Nenhuma Coluna",
   "error_loading_libraries": "Erro ao carregar bibliotecas",
-  "error_loading_library_options": "Erro ao carregar opções de biblioteca"
+  "error_loading_library_options": "Erro ao carregar opções de biblioteca",
+  "iframe_load_error": "Não foi possível exibir a página dentro do iframe, tente novamente.",
+  "no_items_found_filter": "Nenhum item encontrado com o filtro fornecido."
 }

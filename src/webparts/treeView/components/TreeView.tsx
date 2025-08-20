@@ -8,6 +8,7 @@ import { getTranslations, getUserLanguage } from '../../../utils/getTranslations
 import IframePreview from './IframePreview';
 import SplitterLayout from 'react-splitter-layout';
 import 'react-splitter-layout/lib/index.css';
+import TreeViewConfigService from '../services/TreeViewConfigService';
 
 interface ITreeNode {
   key: string;
@@ -50,8 +51,24 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   public async componentDidMount(): Promise<void> {
+    // 1) tenta carregar PublishedTreeData salvo para esta página
+    const pageUrl = TreeViewConfigService.getCurrentPageUrl();
+    try {
+      const cfg = await TreeViewConfigService.loadByPage(pageUrl);
+
+      if (cfg?.PublishedTreeData) {
+        const allItems = JSON.parse(cfg.PublishedTreeData);
+        this.setState({ allDocumentsCache: allItems });
+        this.buildTreeFromData(allItems);
+        return;
+      }
+    } catch (err) {
+      console.warn("Não foi possível ler config/JSON publicado. Seguindo com fluxo online.", err);
+    }
+
     await this.checkAndLoadCache();
   }
+
 
   public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
     if (
@@ -211,6 +228,23 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
       this.setState({ allDocumentsCache: allItems });
       this.buildTreeFromData(allItems);
+
+      try {
+        const pageUrl = TreeViewConfigService.getCurrentPageUrl();
+        const hierarchy = JSON.stringify(
+          [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean)
+        );
+        const library = selectedLibraryUrl || "";
+
+        await TreeViewConfigService.upsertPublishedData(
+          pageUrl,
+          JSON.stringify(allItems),
+          library,
+          hierarchy
+        );
+      } catch (e) {
+        console.warn("Falha ao publicar JSON na lista TreeViewConfigs", e);
+      }
 
     } catch (error) {
       this.setState({ error: `${t.error_loading_data} ${escape((error as any).message)}`, loading: false, treeData: [], allDocumentsCache: [] });
@@ -396,7 +430,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     } else {
       // Se for uma pasta, gera a URL do Iframe e atualiza o estado
       const iframeUrl = this.buildIframeUrl(node);
-      console.log("Iframe URL gerada:", iframeUrl);
       if (iframeUrl) {
         this.setState({ iframeUrl: iframeUrl });
       }
@@ -409,7 +442,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     // Encontra o caminho completo até o nó clicado
     const nodePath = this.findNodePath(this.state.treeData, node.key);
     if (!nodePath) {
-      console.error("Caminho do nó não encontrado.");
       return "";
     }
 
@@ -547,7 +579,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     );
 
     return (
-      <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext ? styles.teams : ''}`}>
+      <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`}>
         <SplitterLayout
           percentage
           primaryInitialSize={30}

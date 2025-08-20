@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import pnp from 'sp-pnp-js';
+import { getTranslations, getUserLanguage } from '../../../utils/getTranslations';
 
 interface IframePreviewProps {
     url: string;
@@ -40,6 +41,8 @@ export default function IframePreview(props: IframePreviewProps) {
     // Fallback state
     const [items, setItems] = useState<any[] | null>(null);
     const [fallbackError, setFallbackError] = useState<string | null>(null);
+
+    const t = getTranslations();
 
     // Tenta detectar bloqueio do iframe. Se for bloqueado por X-Frame-Options/CSP, acessar contentDocument vai lançar.
     const onIframeLoad = () => {
@@ -158,16 +161,16 @@ export default function IframePreview(props: IframePreviewProps) {
             {iframeBlocked && (
                 <div>
                     <div style={{ marginBottom: 8, color: '#9a1b0d' }}>
-                        Não foi possível exibir a página dentro do iframe, tente novamente.
+                        ${t.iframe_load_error}
                     </div>
 
                     {useFallback ? (
                         <div>
                             <div style={{ marginBottom: 8 }}></div>
-                            {checking && <div>Buscando dados...</div>}
+                            {checking}
                             {items && (
                                 <div>
-                                    {items.length === 0 && <div>Nenhum item encontrado com o filtro fornecido.</div>}
+                                    {items.length === 0 && <div>${t.no_items_found_filter}</div>}
                                     {items.length > 0 && (
                                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                             <thead>

@@ -1,6 +1,7 @@
 // src/webparts/treeView/TreeViewWebPart.ts
 
 import * as React from "react";
+import TreeViewConfigService from "./services/TreeViewConfigService";
 import * as ReactDom from "react-dom";
 import { Version } from "@microsoft/sp-core-library";
 import {
@@ -31,7 +32,7 @@ export interface ITreeViewWebPartProps {
   metadataColumn3?: string;
   metadataColumnTypes?: {
     [internalName: string]: { type: string; lookupField?: string };
-  }; // <-- Tipagem atualizada
+  };
 }
 
 const t = getTranslations();
@@ -44,13 +45,12 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
   private _metadataColumnOptions: IPropertyPaneDropdownOption[] = [];
   private _columnTypesMap: {
     [internalName: string]: { type: string; lookupField?: string };
-  } = {}; // <-- Tipagem atualizada
+  } = {};
 
   public render(): void {
     const element: React.ReactElement<ITreeViewProps> = React.createElement(
       TreeView,
       {
-        //description: this.properties.description,
         isDarkTheme: this._isDarkTheme,
         environmentMessage: this._environmentMessage,
         hasTeamsContext: !!this.context.sdks.microsoftTeams,
@@ -68,14 +68,45 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     ReactDom.render(element, this.domElement);
   }
 
-  protected onInit(): Promise<void> {
-    // this._environmentMessage = this._getEnvironmentMessage();
-    return super.onInit().then((_) => {
-      pnp.setup({
-        spfxContext: this.context,
-      });
-      initializeIcons();
-    });
+  protected async onInit(): Promise<void> {
+    await super.onInit();
+
+    pnp.setup({ spfxContext: this.context });
+    initializeIcons();
+
+    // URL absoluta para evitar colisão entre sites distintos com mesmo path
+    const pageUrl = `${this.context.pageContext.web.absoluteUrl}${window.location.pathname}`;
+
+    try {
+      const cfg = await TreeViewConfigService.loadByPage(pageUrl);
+      if (cfg) {
+        // Só hidrata se as props ainda não foram definidas (evita sobrescrever edição em curso)
+        const isEmpty =
+          !this.properties.selectedLibraryUrl &&
+          !this.properties.metadataColumn1 &&
+          !this.properties.metadataColumn2 &&
+          !this.properties.metadataColumn3;
+
+        if (isEmpty) {
+          this.properties.selectedLibraryUrl = cfg.Library || "";
+
+          const h = cfg.Hierarchy
+            ? (JSON.parse(cfg.Hierarchy) as string[])
+            : [];
+          this.properties.metadataColumn1 = h[0] || "";
+          this.properties.metadataColumn2 = h[1] || "";
+          this.properties.metadataColumn3 = h[2] || "";
+
+          // Atualiza UI
+          if (this.renderedOnce) this.render();
+        }
+      }
+    } catch (e) {
+      console.warn(
+        "Falha ao hidratar propriedades a partir da lista TreeViewConfigs:",
+        e
+      );
+    }
   }
 
   protected async onPropertyPaneConfigurationStart(): Promise<void> {
@@ -187,51 +218,88 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     this.context.propertyPane.refresh();
   }
 
-  protected onPropertyPaneFieldChanged(
+  protected async onPropertyPaneFieldChanged(
     propertyPath: string,
     oldValue: any,
     newValue: any
-  ): void {
+  ): Promise<void> {
     super.onPropertyPaneFieldChanged(propertyPath, oldValue, newValue);
 
     if (propertyPath === "selectedLibraryUrl" && newValue !== oldValue) {
       const selectedOption = this._documentLibraryOptions.find(
         (option) => option.key === newValue
       );
+
       if (selectedOption) {
         this.properties.selectedLibraryTitle = selectedOption.text as string;
       } else {
         this.properties.selectedLibraryTitle = undefined;
       }
-      // Limpa as colunas de metadados quando a biblioteca é alterada, evitando problemas de inconsistência
+
+      // Limpa as colunas quando a biblioteca muda
       this.properties.metadataColumn1 = "";
       this.properties.metadataColumn2 = "";
       this.properties.metadataColumn3 = "";
 
-      this.onPropertyPaneConfigurationStart();
+      // ⚠️ Aguarde recarregar opções antes de renderizar e salvar
+      await this.onPropertyPaneConfigurationStart();
+
+      // Renderiza depois que as opções foram atualizadas
+      this.render();
+
+      // Salva config mínima (sem o JSON publicado)
+      try {
+        const pageUrl = window.location.pathname;
+        const hierarchy = JSON.stringify(
+          [
+            this.properties.metadataColumn1,
+            this.properties.metadataColumn2,
+            this.properties.metadataColumn3,
+          ].filter(Boolean)
+        );
+        await TreeViewConfigService.upsert({
+          PageURL: pageUrl,
+          Library: this.properties.selectedLibraryUrl || "",
+          Hierarchy: hierarchy,
+        });
+      } catch (e) {
+        console.warn(
+          "Não foi possível salvar config mínima na lista TreeViewConfigs:",
+          e
+        );
+      }
+      return;
     }
 
     if (
-      propertyPath === "selectedLibraryUrl" ||
       propertyPath === "metadataColumn1" ||
       propertyPath === "metadataColumn2" ||
       propertyPath === "metadataColumn3" ||
       propertyPath === "description"
     ) {
       this.render();
+      try {
+        const pageUrl = window.location.pathname;
+        const hierarchy = JSON.stringify(
+          [
+            this.properties.metadataColumn1,
+            this.properties.metadataColumn2,
+            this.properties.metadataColumn3,
+          ].filter(Boolean)
+        );
+        await TreeViewConfigService.upsert({
+          PageURL: pageUrl,
+          Library: this.properties.selectedLibraryUrl || "",
+          Hierarchy: hierarchy,
+        });
+      } catch (e) {
+        console.warn(
+          "Não foi possível salvar config mínima na lista TreeViewConfigs:",
+          e
+        );
+      }
     }
   }
-
-  // private _getEnvironmentMessage(): string {
-  //   if (!!this.context.sdks.microsoftTeams) {
-  //     return this.context.isServedFromLocalhost
-  //       ? strings.AppLocalEnvironmentTeams
-  //       : strings.AppTeamsTabEnvironment;
-  //   }
-  //   return this.context.isServedFromLocalhost
-  //     ? strings.AppLocalEnvironmentSharePoint
-  //     : strings.AppSharePointEnvironment;
-  // }
 
   protected onThemeChanged(currentTheme: IReadonlyTheme | undefined): void {
     //Mantendo esse método para evitar possíveis erros de mudanças futuras.
