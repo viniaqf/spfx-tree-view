@@ -446,6 +446,13 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
   private buildIframeUrl(node: ITreeNode): string {
     const siteUrl = this.props.context.pageContext.web.absoluteUrl;
+    const libraryUrl = this.props.selectedLibraryUrl;
+
+    //Criando um objeto URL para manipular a string
+    const baseUrl = new URL(siteUrl)
+
+    //Atribuindo o pathname da URL com o caminho da biblioteca.
+    baseUrl.pathname = libraryUrl
 
     // Encontra o caminho completo até o nó clicado
     const nodePath = this.findNodePath(this.state.treeData, node.key);
@@ -484,14 +491,15 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       }
     }
 
-    // Se não houver filtros, retornamos a URL da biblioteca sem filtro
-    if (filterParams.length === 0) {
-      return `${siteUrl}/Normativos/Forms/Menu.aspx?`;
-    }
 
     const filtersQuery = filterParams.join('&');
-    const url = `${siteUrl}/Normativos/Forms/Menu.aspx?${filtersQuery}`;
+    const url = `${baseUrl.href}?${filtersQuery}`;
+
+    //const url = `${siteUrl}/${this.props.selectedLibraryUrl}?${filtersQuery}`;
     console.log("URL do Iframe com filtros concatenados:", url);
+    console.log("Endereço da biblioteca:", this.props.selectedLibraryUrl)
+    console.log("--------------------> Absolut URL:", siteUrl)
+    console.log("--------------------> Absolut URL:", this.props.selectedLibraryTitle)
     return url;
   }
 
