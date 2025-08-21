@@ -15,7 +15,7 @@
 }
 // Conteúdo da árvore
 .treeView {
-  flex: 1; // ocupa o espaço restante
+  width: 100%;
   padding: 1em;
   overflow-y: auto; // rolagem caso fique muito conteúdo
   color: "[theme:bodyText, default: #323130]";
@@ -84,7 +84,7 @@
 }
 // Conteúdo do iframe
 .iframeContainer {
-  flex: 3; // Alterado para ocupar mais espaço que a árvore
+  width: 100%;
   min-width: 300px; // largura mínima
   height: calc(
     100vh - 120px

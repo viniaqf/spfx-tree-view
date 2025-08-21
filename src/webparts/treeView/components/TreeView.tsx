@@ -597,7 +597,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`}>
         <SplitterLayout
           percentage
-          primaryInitialSize={30}
+          primaryIndex={1}
+          primaryInitialSize={70}
           primaryMinSize={20}
           secondaryMinSize={20}
         >
