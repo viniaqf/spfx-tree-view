@@ -604,7 +604,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         >
           {/* Painel esquerdo: Árvore */}
           <div className={styles.treeView}>
-            <p>{t.welcome.replace('{user}', this.props.userDisplayName)}</p>
+            {/* <p>{t.welcome.replace('{user}', this.props.userDisplayName)}</p> */}
             <div className={styles.treeContainer}>
               {loading && treeData.length === 0 && <p>{t.loading}</p>}
               {error && <p style={{ color: 'red' }}>{error}</p>}

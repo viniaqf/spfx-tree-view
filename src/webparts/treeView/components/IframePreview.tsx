@@ -138,13 +138,6 @@ export default function IframePreview(props: IframePreviewProps) {
 
     return (
         <div style={{ ...containerStyle, width }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => { setIframeBlocked(false); setLoaded(false); if (iframeRef.current) iframeRef.current.src = url; }} title="Recarregar" aria-label="Recarregar">Recarregar</button>
-                    <button onClick={() => window.open(url, '_blank')} title="Abrir em nova aba" aria-label="Abrir em nova aba">Abrir em nova aba</button>
-                </div>
-            </div>
-
             {!iframeBlocked && (
                 <div style={{ width: '100%', height }}>
                     <iframe
