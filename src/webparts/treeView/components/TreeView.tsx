@@ -495,7 +495,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     const filtersQuery = filterParams.join('&');
     const url = `${baseUrl.href}?${filtersQuery}`;
 
-    //const url = `${siteUrl}/${this.props.selectedLibraryUrl}?${filtersQuery}`;
     console.log("URL do Iframe com filtros concatenados:", url);
     console.log("Endereço da biblioteca:", this.props.selectedLibraryUrl)
     console.log("--------------------> Absolut URL:", siteUrl)

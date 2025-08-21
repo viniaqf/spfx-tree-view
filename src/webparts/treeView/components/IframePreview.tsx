@@ -4,8 +4,8 @@ import { getTranslations, getUserLanguage } from '../../../utils/getTranslations
 
 interface IframePreviewProps {
     url: string;
-    width?: string; // ex: "100%"
-    height?: string; // ex: "600px"
+    width?: string;
+    height?: string;
     title?: string;
     useFallback?: boolean; // se true tenta buscar dados via PnP quando iframe for bloqueado
     listTitle?: string; // título da lista (para o fallback)
@@ -83,15 +83,6 @@ export default function IframePreview(props: IframePreviewProps) {
         setIframeBlocked(false);
         setItems(null);
         setFallbackError(null);
-
-        // const to = setTimeout(() => {
-        //     if (!loaded) {
-        //         // Se não carregou em 15s, considere bloqueado (vamos permitir recarregar manualmente)
-        //         setIframeBlocked(true);
-        //     }
-        // }, 100);
-        // return () => clearTimeout(to);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [url]);
 
     // Se detectou bloqueio e o usuário quer fallback, buscamos dados via PnP
@@ -116,7 +107,7 @@ export default function IframePreview(props: IframePreviewProps) {
                         const lookupFilter = `${filterField}Id eq ${Number(filterValue)}`;
                         result = await pnp.sp.web.lists.getByTitle(listTitle).items.filter(lookupFilter).select('ID', 'Title', 'FileRef', 'FileLeafRef').top(500).get();
                     } catch (e) {
-                        // ignora
+
                     }
                 }
 
