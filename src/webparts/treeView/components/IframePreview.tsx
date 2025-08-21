@@ -161,7 +161,7 @@ export default function IframePreview(props: IframePreviewProps) {
             {iframeBlocked && (
                 <div>
                     <div style={{ marginBottom: 8, color: '#9a1b0d' }}>
-                        ${t.iframe_load_error}
+                        {t.iframe_load_error}
                     </div>
 
                     {useFallback ? (
@@ -170,7 +170,7 @@ export default function IframePreview(props: IframePreviewProps) {
                             {checking}
                             {items && (
                                 <div>
-                                    {items.length === 0 && <div>${t.no_items_found_filter}</div>}
+                                    {items.length === 0 && <div>{t.no_items_found_filter}</div>}
                                     {items.length > 0 && (
                                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                             <thead>

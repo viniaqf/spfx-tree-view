@@ -60,6 +60,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         const allItems = JSON.parse(cfg.PublishedTreeData);
         this.setState({ allDocumentsCache: allItems });
         this.buildTreeFromData(allItems);
+
+        // Inicializa o iframeUrl aqui
+        this.setState({ iframeUrl: this.props.selectedLibraryUrl });
         return;
       }
     } catch (err) {
@@ -98,13 +101,15 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       const cachedColumns = parsedData.columns;
       const allItems = parsedData.items;
 
-      // Verifica se o cache corresponde aos três níveis de hierarquia atuais
       const currentColumns = [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean);
       const cacheIsValid = JSON.stringify(currentColumns.sort()) === JSON.stringify(cachedColumns.sort());
 
       if (cacheIsValid) {
         this.setState({ allDocumentsCache: allItems });
         this.buildTreeFromData(allItems);
+
+        // Inicializa o iframeUrl aqui
+        this.setState({ iframeUrl: this.props.selectedLibraryUrl });
         return;
       }
     }
@@ -228,6 +233,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
       this.setState({ allDocumentsCache: allItems });
       this.buildTreeFromData(allItems);
+
+      // Inicializa o iframeUrl aqui
+      this.setState({ iframeUrl: this.props.selectedLibraryUrl });
 
       try {
         const pageUrl = TreeViewConfigService.getCurrentPageUrl();
