@@ -3,28 +3,21 @@
 // Importa as referências de SASS do Office UI Fabric React (Fluent UI)
 @import "~office-ui-fabric-react/dist/sass/References.scss";
 
-// Container principal da WebPart
 .treeViewContainer {
-  display: flex;
-  flex-direction: row;
-  width: 100%; // ocupa toda a largura disponível
   height: calc(
     100vh - 120px
   ); // ocupa a altura total da janela, subtraindo o cabeçalho e rodapé.
   gap: 20px; //
 }
-// Conteúdo da árvore
+
 .treeView {
   padding: 1em;
-  overflow-y: auto; // rolagem caso fique muito conteúdo
+  overflow-y: auto;
   color: "[theme:bodyText, default: #323130]";
   color: var(--bodyText);
   font-family: $ms-font-family-fallbacks;
 }
-// Estilos específicos quando no contexto do Teams
-.teams {
-  @extend .treeView;
-}
+
 // Caixa que contém a árvore
 .treeContainer {
   margin-top: 20px;
@@ -81,49 +74,6 @@
   color: var(--neutralSecondary);
   font-style: italic;
 }
-// Conteúdo do iframe
 .iframeContainer {
-  min-width: 300px; // largura mínima
-  height: calc(
-    100vh - 120px
-  ); // ocupa a altura total da janela, subtraindo o cabeçalho e rodapé.
-}
-// Cabeçalho de boas-vindas
-.welcome {
-  text-align: center;
-  padding-bottom: 20px;
-  border-bottom: 1px solid "[theme:bodyDivider, default:#edebe9]";
-  border-bottom: 1px solid var(--bodyDivider);
-  margin-bottom: 20px;
-
-  h2 {
-    font-size: 1.8em;
-    margin-bottom: 10px;
-    color: "[theme:themePrimary, default:#0078d4]";
-    color: var(--themePrimary);
-  }
-
-  div {
-    font-size: 0.9em;
-    color: "[theme:bodyText, default:#323130]";
-    color: var(--bodyText);
-  }
-}
-.welcomeImage {
-  width: 100%;
-  max-width: 420px;
-}
-// Links
-.links {
-  a {
-    text-decoration: none;
-    color: "[theme:link, default:#03787c]";
-    color: var(--link);
-
-    &:hover {
-      text-decoration: underline;
-      color: "[theme:linkHovered, default: #014446]";
-      color: var(--linkHovered);
-    }
-  }
+  height: calc(100vh - 120px);
 }
