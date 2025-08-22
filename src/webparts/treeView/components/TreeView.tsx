@@ -599,8 +599,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           percentage
           primaryIndex={1}
           secondaryInitialSize={20}
-          primaryMinSize={30}
-          secondaryMinSize={20}
+          primaryMinSize={40}
+          secondaryMinSize={10}
         >
           {/* Painel esquerdo: Árvore */}
           <div className={styles.treeView}>
