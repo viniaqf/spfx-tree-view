@@ -20,9 +20,6 @@ div[data-automationid="commandbar"] {
   display: none !important;
 }
 
-div[role="region"]{
-  display: none !important;
-}
 
 div[data-automationid="appCommandBar"] {
   height: 0 !important;

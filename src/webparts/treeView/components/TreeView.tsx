@@ -55,8 +55,42 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     };
   }
 
-  public async componentDidMount(): Promise<void> {
+  // Verifica se a URL existe (retorna true se status 200-299)
+  private async checkUrlExists(url: string): Promise<boolean> {
+    try {
+      const res = await fetch(url, { method: "HEAD" });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
 
+  private async getDefaultLibraryViewUrl(): Promise<string> {
+    const webUrl = this.props.context.pageContext.web.absoluteUrl;
+    const libUrl = this.props.selectedLibraryUrl || "";
+    if (!libUrl) return "";
+
+    const libAbs = new URL(libUrl, webUrl); // https://<tenant>/sites/.../Normativos
+    const libNoTrail = libAbs.href.replace(/\/$/, "");
+
+    // Define página conforme idioma
+    const lang = (getUserLanguage() || "pt").toLowerCase();
+    const viewPage = lang.startsWith("es") ? "ES.aspx" : "PT.aspx";
+    const candidateUrl = `${libNoTrail}/Forms/${viewPage}`;
+
+    // Verifica se a view existe
+    const exists = await this.checkUrlExists(candidateUrl);
+
+    if (exists) {
+      return candidateUrl;
+    }
+
+    // Fallback para raiz da biblioteca (sem .aspx)
+    return libNoTrail;
+  }
+
+
+  public async componentDidMount(): Promise<void> {
     injectCssStringOnce(HIDE_SWITCHER_CSS, 'treeview_hide_switcher_css');
 
     // 1) tenta carregar PublishedTreeData salvo para esta página
@@ -69,8 +103,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         this.setState({ allDocumentsCache: allItems });
         this.buildTreeFromData(allItems);
 
-        // Inicializa o iframeUrl aqui
-        this.setState({ iframeUrl: this.props.selectedLibraryUrl });
+
+        const defaultUrl = await this.getDefaultLibraryViewUrl();
+        this.setState({ iframeUrl: defaultUrl });
+
         return;
       }
     } catch (err) {
@@ -78,8 +114,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
 
     await this.checkAndLoadCache();
-  }
 
+    // Inicializa URL padrão (PT/ES ou fallback raiz)
+    const defaultUrl = await this.getDefaultLibraryViewUrl();
+    this.setState({ iframeUrl: defaultUrl });
+  }
 
   public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
     if (
@@ -116,8 +155,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         this.setState({ allDocumentsCache: allItems });
         this.buildTreeFromData(allItems);
 
-        // Inicializa o iframeUrl aqui
-        this.setState({ iframeUrl: this.props.selectedLibraryUrl });
+
         return;
       }
     }
@@ -242,8 +280,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       this.setState({ allDocumentsCache: allItems });
       this.buildTreeFromData(allItems);
 
-      // Inicializa o iframeUrl aqui
-      this.setState({ iframeUrl: this.props.selectedLibraryUrl });
+
 
       try {
         const pageUrl = TreeViewConfigService.getCurrentPageUrl();
@@ -439,76 +476,78 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
   private async handleNodeClick(node: ITreeNode): Promise<void> {
     if (!node.isFolder) {
-      // Se for um arquivo, abre a URL do documento em uma nova aba
-      if (node.url) {
-        window.open(node.url, '_blank');
-      }
-    } else {
-      // Se for uma pasta, gera a URL do Iframe e atualiza o estado
-      const iframeUrl = this.buildIframeUrl(node);
-      if (iframeUrl) {
-        this.setState({ iframeUrl: iframeUrl });
-      }
+      if (node.url) window.open(node.url, '_blank');
+      return;
+    }
+
+    const iframeUrl = await this.buildIframeUrl(node);
+    if (iframeUrl) {
+      this.setState({ iframeUrl });
     }
   }
 
-  private buildIframeUrl(node: ITreeNode): string {
-    const siteUrl = this.props.context.pageContext.web.absoluteUrl;
-    const libraryUrl = this.props.selectedLibraryUrl;
 
-    //Criando um objeto URL para manipular a string
-    const baseUrl = new URL(siteUrl)
 
-    //Atribuindo o pathname da URL com o caminho da biblioteca.
-    baseUrl.pathname = libraryUrl
+  private async buildIframeUrl(node: ITreeNode): Promise<string> {
+    const webUrl = this.props.context.pageContext.web.absoluteUrl;
+    const libUrl = this.props.selectedLibraryUrl || "";
+    if (!libUrl) return "";
 
-    // Encontra o caminho completo até o nó clicado
+    const libAbs = new URL(libUrl, webUrl);
+    const libNoTrail = libAbs.href.replace(/\/$/, "");
+
+    // 1. Constrói a URL com a view padrão e os filtros
+    const lang = (getUserLanguage() || "pt").toLowerCase();
+    const viewPage = lang.startsWith("es") ? "ES.aspx" : "PT.aspx";
+    const baseViewWithAspx = `${libNoTrail}/Forms/${viewPage}`;
+
     const nodePath = this.findNodePath(this.state.treeData, node.key);
-    if (!nodePath) {
-      return "";
-    }
-
-    let filterParams: string[] = [];
+    const filterParams: string[] = [];
     let filterCount = 1;
 
-    // Itera sobre o caminho do nó, ignorando o nó raiz (nível 0)
-    for (let i = 1; i < nodePath.length; i++) {
-      const currentPathNode = nodePath[i];
+    if (nodePath) {
+      for (let i = 1; i < nodePath.length; i++) {
+        const currentPathNode = nodePath[i];
+        if (currentPathNode.columnInternalName && currentPathNode.columnValue) {
+          let filterField = currentPathNode.columnInternalName;
+          let filterValue = currentPathNode.columnValue;
 
-      if (currentPathNode.columnInternalName && currentPathNode.columnValue) {
-        let filterField = currentPathNode.columnInternalName;
-        let filterValue = currentPathNode.columnValue;
+          if (currentPathNode.columnInternalName === "aplicacaoNormativo") {
+            const aplicacaoNormativoId = this.state.allDocumentsCache
+              .find(doc => this.getFieldValue(doc, currentPathNode.columnInternalName) === currentPathNode.columnValue)
+              ?.aplicacaoNormativo?.Id;
 
-        // Se o nó atual é para "aplicacaoNormativo", obtenha o ID
-        if (currentPathNode.columnInternalName === "aplicacaoNormativo") {
-          const aplicacaoNormativoId = this.state.allDocumentsCache
-            .find(doc => this.getFieldValue(doc, currentPathNode.columnInternalName) === currentPathNode.columnValue)
-            ?.aplicacaoNormativo?.Id;
-
-          if (aplicacaoNormativoId) {
-            filterValue = aplicacaoNormativoId;
+            if (aplicacaoNormativoId) {
+              filterValue = aplicacaoNormativoId;
+            }
           }
+          filterParams.push(
+            `FilterField${filterCount}=${encodeURIComponent(filterField)}`,
+            `FilterValue${filterCount}=${encodeURIComponent(filterValue)}`,
+            `FilterType${filterCount}=Lookup`
+          );
+          filterCount++;
         }
-
-        filterParams.push(
-          `FilterField${filterCount}=${encodeURIComponent(filterField)}`,
-          `FilterValue${filterCount}=${encodeURIComponent(filterValue)}`,
-          `FilterType${filterCount}=Lookup`
-        );
-        filterCount++;
       }
     }
 
+    const filtersQuery = filterParams.length > 0 ? `?${filterParams.join("&")}` : "";
+    const candidateUrl = `${baseViewWithAspx}${filtersQuery}`;
 
-    const filtersQuery = filterParams.join('&');
-    const url = `${baseUrl.href}?${filtersQuery}`;
+    // 2. Verifica se a URL com a view e os filtros existe.
+    const exists = await this.checkUrlExists(candidateUrl);
 
-    console.log("URL do Iframe com filtros concatenados:", url);
-    console.log("Endereço da biblioteca:", this.props.selectedLibraryUrl)
-    console.log("--------------------> Absolut URL:", siteUrl)
-    console.log("--------------------> Absolut URL:", this.props.selectedLibraryTitle)
-    return url;
+    if (exists) {
+      console.log("URL do Iframe com filtros concatenados:", candidateUrl);
+      return candidateUrl;
+    } else {
+      // 3. Fallback: se a URL com a view for 404, retorna a URL da biblioteca.
+      const fallbackUrl = libNoTrail;
+      console.log("URL com .aspx retornou 404. Usando fallback:", fallbackUrl);
+      return fallbackUrl;
+    }
   }
+
 
   // Método auxiliar para encontrar a trilha raiz dos nós da hierarquia, fundamental para fazer a URL do iframe retornar os filtros concatenados.
   private findNodePath = (nodes: ITreeNode[], key: string, path: ITreeNode[] = []): ITreeNode[] | undefined => {
