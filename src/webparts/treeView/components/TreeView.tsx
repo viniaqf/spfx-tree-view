@@ -9,6 +9,11 @@ import IframePreview from './IframePreview';
 import SplitterLayout from 'react-splitter-layout';
 import 'react-splitter-layout/lib/index.css';
 import TreeViewConfigService from '../services/TreeViewConfigService';
+import { injectCssStringOnce } from '../../../utils/localCssInjector';
+import { HIDE_SWITCHER_CSS } from '../../../styles/spfx_style';
+
+
+
 
 interface ITreeNode {
   key: string;
@@ -51,6 +56,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   public async componentDidMount(): Promise<void> {
+
+    injectCssStringOnce(HIDE_SWITCHER_CSS, 'treeview_hide_switcher_css');
+
     // 1) tenta carregar PublishedTreeData salvo para esta página
     const pageUrl = TreeViewConfigService.getCurrentPageUrl();
     try {

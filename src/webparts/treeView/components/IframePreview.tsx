@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import pnp from 'sp-pnp-js';
 import { getTranslations, getUserLanguage } from '../../../utils/getTranslations';
+import { HIDE_SWITCHER_CSS } from '../../../styles/spfx_style';
+
 
 interface IframePreviewProps {
     url: string;
@@ -34,6 +36,7 @@ export default function IframePreview(props: IframePreviewProps) {
     } = props;
 
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
+    const observerRef = useRef<MutationObserver | null>(null);
     const [loaded, setLoaded] = useState(false);
     const [iframeBlocked, setIframeBlocked] = useState(false);
     const [checking, setChecking] = useState(false);
@@ -48,14 +51,40 @@ export default function IframePreview(props: IframePreviewProps) {
     const onIframeLoad = () => {
         setLoaded(true);
         try {
-            // Se for same-origin, conseguimos acessar o document sem erro.
-            const doc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
+            const iframe = iframeRef.current;
+            const doc = iframe?.contentDocument || iframe?.contentWindow?.document;
+
             if (doc) {
-                // Se a página estiver vazia (alguns bloqueios resultam em body vazio) tenta marcar como bloqueado
+                // INJETAR <style> NO HEAD DO IFRAME (apenas 1 vez)
+                if (!doc.head.querySelector('style[data-injected-by="treeview"]')) {
+                    const style = doc.createElement('style');
+                    style.setAttribute('data-injected-by', 'treeview');
+                    style.textContent = HIDE_SWITCHER_CSS;
+                    doc.head.appendChild(style);
+                }
+
+                //Força ocultar imediatamente (caso haja estilos inline ou re-render)
+                const hideNow = () => {
+                    doc
+                        .querySelectorAll(
+                            'button[data-automationid="librariesDropdownButton"], button[class^="librariesDropdown_"]'
+                        )
+                        .forEach((el) => {
+                            (el as HTMLElement).style.setProperty('display', 'none', 'important');
+                        });
+                };
+                hideNow();
+
+                // OBSERVA re-renderizações dentro do iframe e reaplica o hide
+                if (observerRef.current) observerRef.current.disconnect();
+                observerRef.current = new MutationObserver(() => hideNow());
+                observerRef.current.observe(doc.body, { childList: true, subtree: true });
+
+                //  Sinaliza que o iframe NÃO está bloqueado
+                setIframeBlocked(false);
+
                 const bodyText = doc.body?.innerText || '';
                 if (bodyText.trim().length === 0) {
-                    // Pode ser bloqueio ou página que realmente está vazia
-                    // aguarda um pequeno tempo antes de decidir
                     setTimeout(() => {
                         try {
                             const d = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
@@ -63,22 +92,22 @@ export default function IframePreview(props: IframePreviewProps) {
                             if (bt.trim().length === 0) {
                                 setIframeBlocked(true);
                             }
-                        } catch (e) {
+                        } catch {
                             setIframeBlocked(true);
                         }
                     }, 400);
-                } else {
-                    setIframeBlocked(false);
                 }
             }
         } catch (e) {
-            // Acesso negado -> cross-origin ou bloqueado explicitamente
+            // Cross-origin ou bloqueio total: não dá para acessar o DOM do iframe
             setIframeBlocked(true);
         }
     };
 
+
     // timeout para detectar quando onLoad não ocorrer (algumas vezes o browser ignora o load)
     useEffect(() => {
+        observerRef.current?.disconnect();
         setLoaded(false);
         setIframeBlocked(false);
         setItems(null);
