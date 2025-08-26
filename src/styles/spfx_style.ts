@@ -20,14 +20,19 @@ div[data-automationid="commandbar"] {
   display: none !important;
 }
 
-
 div[data-automationid="appCommandBar"] {
   height: 0 !important;
   min-height: 0 !important;
   overflow: hidden !important;
 }
 
+button[data-automationid="filterPill"] i[data-icon-name="Cancel"] {
+  display: none !important;
+}
 
+button[data-automationid="clearFiltersPill"] {
+  display: none !important;
+}
 
 
 `;
