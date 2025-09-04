@@ -60,24 +60,12 @@ export default function IframePreview(props: IframePreviewProps) {
     const [loaded, setLoaded] = useState(false);
     const [iframeBlocked, setIframeBlocked] = useState(false);
     const [checking, setChecking] = useState(false);
-
-    // Fallback state
     const [items, setItems] = useState<any[] | null>(null);
     const [fallbackError, setFallbackError] = useState<string | null>(null);
 
+
     const t = getTranslations();
 
-    if (!url) {
-        return (
-            <div style={{ ...containerStyle, width }}>
-                <div style={{ ...placeholderStyle, height }}>
-                    <div style={placeholderTextStyle}>
-                        {emptyMessage || "Por favor, selecione um item para visualizar."}
-                    </div>
-                </div>
-            </div>
-        );
-    }
 
     // Tenta detectar bloqueio do iframe. Se for bloqueado por X-Frame-Options/CSP, acessar contentDocument vai lançar.
     const onIframeLoad = () => {
@@ -188,9 +176,18 @@ export default function IframePreview(props: IframePreviewProps) {
         return () => { canceled = true; };
     }, [iframeBlocked, useFallback, listTitle, filterField, filterValue]);
 
+    // IframePreview.tsx — SUBSTITUIR O return INTEIRO por este
     return (
         <div style={{ ...containerStyle, width }}>
-            {!iframeBlocked && (
+            {!url ? (
+                // Caso 1: sem URL → placeholder inicial
+                <div style={{ ...placeholderStyle, height }}>
+                    <div style={placeholderTextStyle}>
+                        {emptyMessage || "Por favor, selecione um item para visualizar."}
+                    </div>
+                </div>
+            ) : !iframeBlocked ? (
+                // Caso 2: com URL e iframe OK
                 <div style={{ width: '100%', height }}>
                     <iframe
                         ref={iframeRef}
@@ -201,9 +198,8 @@ export default function IframePreview(props: IframePreviewProps) {
                         onLoad={onIframeLoad}
                     />
                 </div>
-            )}
-
-            {iframeBlocked && (
+            ) : (
+                // Caso 3: com URL, mas bloqueado → fallback
                 <div>
                     <div style={{ marginBottom: 8, color: '#9a1b0d' }}>
                         {t.iframe_load_error}
@@ -232,7 +228,9 @@ export default function IframePreview(props: IframePreviewProps) {
                                                         <td style={{ padding: 6, borderBottom: '1px solid #f5f5f5' }}>{it.Title}</td>
                                                         <td style={{ padding: 6, borderBottom: '1px solid #f5f5f5' }}>
                                                             {it.FileRef ? (
-                                                                <a href={`${it.FileRef}?web=1`} target="_blank" rel="noopener noreferrer">{it.FileLeafRef || it.FileRef}</a>
+                                                                <a href={`${it.FileRef}?web=1`} target="_blank" rel="noopener noreferrer">
+                                                                    {it.FileLeafRef || it.FileRef}
+                                                                </a>
                                                             ) : ('-')}
                                                         </td>
                                                     </tr>
