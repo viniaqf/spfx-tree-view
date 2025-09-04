@@ -1,5 +1,3 @@
-// src/webparts/treeView/TreeViewWebPart.ts
-
 import * as React from "react";
 import TreeViewConfigService from "./services/TreeViewConfigService";
 import * as ReactDom from "react-dom";
@@ -11,6 +9,8 @@ import {
   IPropertyPaneDropdownOption,
   IPropertyPaneField,
   PropertyPaneToggle,
+  PropertyPaneButton,
+  PropertyPaneButtonType,
 } from "@microsoft/sp-property-pane";
 import { BaseClientSideWebPart } from "@microsoft/sp-webpart-base";
 import { IReadonlyTheme } from "@microsoft/sp-component-base";
@@ -22,6 +22,7 @@ import pnp from "sp-pnp-js";
 
 import { initializeIcons } from "office-ui-fabric-react";
 import { getTranslations } from "../../utils/getTranslations";
+import { PropertyPaneAsyncButton } from "./components/PropertyPaneAsyncButton";
 
 export interface ITreeViewWebPartProps {
   description: string;
@@ -40,6 +41,7 @@ const t = getTranslations();
 export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebPartProps> {
   private _isDarkTheme: boolean = false;
   private _environmentMessage: string = "";
+  private _isRefreshing: boolean = false;
 
   private _documentLibraryOptions: IPropertyPaneDropdownOption[] = [];
   private _metadataColumnOptions: IPropertyPaneDropdownOption[] = [];
@@ -329,6 +331,30 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     return Version.parse("1.0");
   }
 
+  private async handleRefreshClick(): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+
+    this._isRefreshing = true;
+    this.context.propertyPane.refresh();
+
+    try {
+      await this.onPropertyPaneConfigurationStart();
+
+      this.render();
+
+      console.log(
+        "Web part forçada a recarregar. O cache será limpo e os dados buscados novamente."
+      );
+    } catch (error) {
+      console.error("Falha ao recarregar os metadados:", error);
+    } finally {
+      this._isRefreshing = false;
+      this.context.propertyPane.refresh();
+    }
+  }
+
   protected getPropertyPaneConfiguration(): IPropertyPaneConfiguration {
     const disableColumnDropdowns =
       !this.properties.selectedLibraryUrl ||
@@ -346,14 +372,9 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     return {
       pages: [
         {
-          // header: { description: strings.PropertyPaneDescription },
           groups: [
             {
-              // groupName: strings.BasicGroupName,
               groupFields: [
-                // PropertyPaneTextField('description', {
-                //   label: strings.DescriptionFieldLabel
-                // }),
                 PropertyPaneDropdown("selectedLibraryUrl", {
                   label: t.select_library,
                   options: this._documentLibraryOptions,
@@ -379,6 +400,12 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
                   selectedKey: this.properties.metadataColumn3,
                   disabled:
                     disableColumnDropdowns || !this.properties.metadataColumn2,
+                }),
+                PropertyPaneAsyncButton("refreshButton", {
+                  label: t.reloadMetadata,
+                  isLoading: this._isRefreshing,
+                  onClick: this.handleRefreshClick.bind(this),
+                  disabled: !this.properties.selectedLibraryUrl,
                 }),
               ],
             },

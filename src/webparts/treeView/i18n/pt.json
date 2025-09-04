@@ -19,5 +19,7 @@
   "error_loading_library_options": "Erro ao carregar opções de biblioteca",
   "iframe_load_error": "Não foi possível exibir a página dentro do iframe, tente novamente.",
   "no_items_found_filter": "Nenhum item encontrado com o filtro fornecido.",
-  "select_item_to_show_normativos": "Por favor, selecione um item do menu para apresentar os normativos"
+  "select_item_to_show_normativos": "Por favor, selecione um item do menu para apresentar os normativos",
+  "reloadMetadata": "Recarregar Metadados",
+  "updating": "Atualizando..."
 }
