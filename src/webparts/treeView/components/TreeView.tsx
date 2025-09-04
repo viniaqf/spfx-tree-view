@@ -38,6 +38,7 @@ interface IComponentTreeViewState {
   allDocumentsCache: any[];
   aplicacaoNormativoListId: string | null;
   iframeUrl: string;
+
 }
 
 const t = getTranslations();
@@ -90,10 +91,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
 
+
   public async componentDidMount(): Promise<void> {
     injectCssStringOnce(HIDE_SWITCHER_CSS, 'treeview_hide_switcher_css');
 
-    // 1) tenta carregar PublishedTreeData salvo para esta página
     const pageUrl = TreeViewConfigService.getCurrentPageUrl();
     try {
       const cfg = await TreeViewConfigService.loadByPage(pageUrl);
@@ -103,9 +104,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         this.setState({ allDocumentsCache: allItems });
         this.buildTreeFromData(allItems);
 
-
-        const defaultUrl = await this.getDefaultLibraryViewUrl();
-        this.setState({ iframeUrl: defaultUrl });
+        // const defaultUrl = await this.getDefaultLibraryViewUrl();
+        // this.setState({ iframeUrl: defaultUrl });
 
         return;
       }
@@ -115,10 +115,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     await this.checkAndLoadCache();
 
-    // Inicializa URL padrão (PT/ES ou fallback raiz)
-    const defaultUrl = await this.getDefaultLibraryViewUrl();
-    this.setState({ iframeUrl: defaultUrl });
+    // const defaultUrl = await this.getDefaultLibraryViewUrl();
+    // this.setState({ iframeUrl: defaultUrl });
   }
+
 
   public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
     if (
@@ -796,6 +796,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
             <IframePreview
               url={iframeUrl}
               listTitle={this.props.selectedLibraryTitle}
+              emptyMessage={t.select_item_to_show_normativos}
             />
           </div>
         </SplitterLayout>

@@ -13,6 +13,7 @@ interface IframePreviewProps {
     listTitle?: string; // título da lista (para o fallback)
     filterField?: string; // campo usado no filtro (para o fallback)
     filterValue?: string; // valor do filtro (para o fallback)
+    emptyMessage?: string;
 }
 
 const containerStyle: React.CSSProperties = {
@@ -24,6 +25,24 @@ const containerStyle: React.CSSProperties = {
     maxWidth: '100%'
 };
 
+const placeholderStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'white',
+    width: '100%',
+    height: '100%',
+    minHeight: '200px'
+};
+
+const placeholderTextStyle: React.CSSProperties = {
+    fontSize: 16,
+    color: '#444',
+    textAlign: 'center',
+    lineHeight: 1.4
+};
+
+
 export default function IframePreview(props: IframePreviewProps) {
     const {
         url,
@@ -32,7 +51,8 @@ export default function IframePreview(props: IframePreviewProps) {
         useFallback = true,
         listTitle,
         filterField,
-        filterValue
+        filterValue,
+        emptyMessage
     } = props;
 
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -46,6 +66,18 @@ export default function IframePreview(props: IframePreviewProps) {
     const [fallbackError, setFallbackError] = useState<string | null>(null);
 
     const t = getTranslations();
+
+    if (!url) {
+        return (
+            <div style={{ ...containerStyle, width }}>
+                <div style={{ ...placeholderStyle, height }}>
+                    <div style={placeholderTextStyle}>
+                        {emptyMessage || "Por favor, selecione um item para visualizar."}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // Tenta detectar bloqueio do iframe. Se for bloqueado por X-Frame-Options/CSP, acessar contentDocument vai lançar.
     const onIframeLoad = () => {
