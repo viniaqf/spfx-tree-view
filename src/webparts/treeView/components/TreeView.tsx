@@ -38,6 +38,7 @@ interface IComponentTreeViewState {
   allDocumentsCache: any[];
   aplicacaoNormativoListId: string | null;
   iframeUrl: string;
+  selectedKey: string | null; // << ADICIONE ESTA LINHA
 
 }
 
@@ -52,7 +53,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       error: "",
       allDocumentsCache: [],
       aplicacaoNormativoListId: null,
-      iframeUrl: ""
+      iframeUrl: "",
+      selectedKey: null,
     };
   }
 
@@ -489,13 +491,15 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
 
     if (node.level === 0) {
-      this.setState({ iframeUrl: "" });
+      this.setState({ iframeUrl: "", selectedKey: null });
       return;
     }
 
     const iframeUrl = await this.buildIframeUrl(node);
     if (iframeUrl) {
-      this.setState({ iframeUrl });
+      this.setState({ iframeUrl, selectedKey: node.key });
+    } else {
+      this.setState({ selectedKey: node.key });
     }
   }
 
@@ -741,7 +745,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
 
   public render(): React.ReactElement<ITreeViewProps> {
-    const { loading, error, treeData, iframeUrl } = this.state;
+    const { loading, error, treeData, iframeUrl, selectedKey } = this.state;
 
     const renderTreeNodes = (nodes: ITreeNode[]) => (
       <ul className={styles.treeList}>
@@ -754,7 +758,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
                 </span>
               )}
               <Icon iconName={node.icon} style={{ marginRight: 5 }} />
-              <span onClick={() => this.handleNodeClick(node)}>
+              <span
+                onClick={() => this.handleNodeClick(node)}
+                className={node.key === selectedKey ? styles.selectedNodeLabel : undefined}
+              >
                 {escape(node.label)}
               </span>
             </div>
