@@ -480,9 +480,16 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     });
   }
 
+
   private async handleNodeClick(node: ITreeNode): Promise<void> {
+
     if (!node.isFolder) {
       if (node.url) window.open(node.url, '_blank');
+      return;
+    }
+
+    if (node.level === 0) {
+      this.setState({ iframeUrl: "" });
       return;
     }
 
@@ -491,8 +498,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       this.setState({ iframeUrl });
     }
   }
-
-
 
   private async buildIframeUrl(node: ITreeNode): Promise<string> {
     const webUrl = this.props.context.pageContext.web.absoluteUrl;
