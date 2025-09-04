@@ -347,6 +347,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     const col = columns[currentLevel - 1];
     if (!col) return [];
+    const colStr: string = String(col);
 
     const unique = new Set<string>();
     docs.forEach(doc => {
@@ -355,18 +356,19 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     });
 
     return Array.from(unique).sort().map(value => ({
-      key: `${col}-${value}-${currentLevel}-${this.buildFilterQueryForItems([...currentFilters, { column: col, value }])}`,
-      label: this.getFriendlyColumnValue(value, col),
+      key: `${colStr}-${value}-${currentLevel}-${this.buildFilterQueryForItems([...currentFilters, { column: colStr, value }])}`,
+      label: this.getLabelWithOptionalId(colStr, value, docs),
       icon: "Tag",
       isFolder: true,
       level: currentLevel,
-      columnInternalName: col,
+      columnInternalName: colStr,
       columnValue: value,
       children: [],
       isExpanded: false,
       isClicked: false,
-      filterQuery: this.buildFilterQueryForItems([...currentFilters, { column: col, value }])
+      filterQuery: this.buildFilterQueryForItems([...currentFilters, { column: colStr, value }])
     }));
+
   };
 
   private getFieldValue = (item: any, name: string): any => {
@@ -401,10 +403,14 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         "";
     }
 
-    if (name.endsWith("Id") && name !== "ID") {
+    if (name === "ID") {
+      return item[name];
+    }
+    if (name.endsWith("Id")) {
       const base = name.slice(0, -2);
       return item[base]?.Title ?? item[name] ?? "";
     }
+
 
     if (item.ListItemAllFields?.[name] !== undefined) {
       const li = item.ListItemAllFields[name];
@@ -609,6 +615,125 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
     return val;
   }
+
+  /**
+ * Formata o ID com zero à esquerda para no mínimo 2 dígitos.
+ * Ex.: "1" -> "01", "10" -> "10".
+ */
+  private formatId2Digits(idLike: string | number | null | undefined): string {
+    if (idLike === null || idLike === undefined) return "";
+    const n = parseInt(String(idLike), 10);
+    if (isNaN(n)) return String(idLike);
+    return String(n).padStart(2, "0");
+  }
+
+
+  /**
+ * Tenta extrair um ID de um valor bruto do campo (objeto, array ou string no formato SharePoint "12;#Rótulo;#34;#Outro").
+ */
+  private tryExtractIdFromRaw(raw: any, value: string): string | null {
+    if (!raw) return null;
+
+    // Caso 1: Objeto único já expandido (Lookup/User/ManagedMetadata)
+    if (typeof raw === "object" && !Array.isArray(raw)) {
+      // Alguns tipos podem expor Id ou WssId (taxonomia)
+      return raw.Id ?? raw.WssId ?? null;
+    }
+
+    // Caso 2: Array (multi-lookup/managed metadata multi)
+    if (Array.isArray(raw)) {
+      // Procura o item do array cujo "Title/Label/LookupValue/Sigla/Desc*" bate com o 'value'
+      const hit = raw.find(v => {
+        const display =
+          v?.Title ?? v?.Label ?? v?.LookupValue ?? v?.Sigla ?? v?.DescTipoAplicacaoPT ?? v?.DescTipoAplicacaoES ?? String(v);
+        return String(display) === String(value);
+      });
+      if (hit) {
+        return hit.Id ?? hit.WssId ?? null;
+      }
+      return null;
+    }
+
+    // Caso 3: String no formato "12;#Rótulo" (ou com vários pares)
+    if (typeof raw === "string" && raw.includes(";#")) {
+      // Divide em pares [id, label, id, label, ...]
+      const parts = raw.split(";#");
+      // Ex.: ["12", "Rótulo", "34", "Outro"]
+      for (let i = 0; i < parts.length - 1; i += 2) {
+        const maybeId = parts[i];
+        const maybeLabel = parts[i + 1];
+        if (String(maybeLabel) === String(value)) {
+          return maybeId || null;
+        }
+      }
+      // fallback simples para string "id;#label" (último par)
+      if (parts.length >= 2 && parts[parts.length - 1] === value) {
+        return parts[parts.length - 2] || null;
+      }
+    }
+
+    return null;
+  }
+
+
+  private getIdForColumnValue(col: string, value: string, docs: any[]): string | null {
+    if (!col || !value) return null;
+
+    if (col !== "aplicacaoNormativo") return null;
+
+    const match = docs.find(doc => String(this.getFieldValue(doc, col)) === String(value));
+    if (!match) return null;
+
+    if (match[col]?.Id) {
+      return String(match[col].Id);
+    }
+
+    const raw = match[col];
+    const idFromRaw = this.tryExtractIdFromRaw(raw, value);
+    if (idFromRaw) return String(idFromRaw);
+
+    if (col.includes("/")) {
+      const base = col.split("/")[0];
+      const idFromBase = this.tryExtractIdFromRaw(match[base], value);
+      if (idFromBase) return String(idFromBase);
+      if (match[base]?.Id) return String(match[base].Id);
+    }
+
+    if (col.endsWith("Id") && String(col) !== "ID") {
+      const idVal = match[col];
+      if (idVal !== undefined && idVal !== null && String(this.getFieldValue(match, col.slice(0, -2))) === String(value)) {
+        return String(idVal);
+      }
+    }
+
+    const li = match.ListItemAllFields?.[col];
+    if (li) {
+      const idFromLi = this.tryExtractIdFromRaw(li, value);
+      if (idFromLi) return String(idFromLi);
+      if (li?.Id) return String(li.Id);
+    }
+
+    return null;
+  }
+
+  /**
+   * Monta o rótulo que será exibido na árvore: "ID - ValorAmigável" se houver ID, senão "ValorAmigável".
+   */
+  private getLabelWithOptionalId(col: string, rawValue: string, docsInScope: any[]): string {
+    const friendly = this.getFriendlyColumnValue(rawValue, col);
+
+    if (col === "aplicacaoNormativo") {
+      const id = this.getIdForColumnValue(col, friendly, docsInScope);
+      if (id) {
+        const padded = this.formatId2Digits(id);
+        return `${padded} - ${friendly}`;
+      }
+    }
+
+    return friendly;
+  }
+
+
 
   public render(): React.ReactElement<ITreeViewProps> {
     const { loading, error, treeData, iframeUrl } = this.state;
