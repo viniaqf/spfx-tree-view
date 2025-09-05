@@ -238,15 +238,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         let select = col;
         let expand: string | undefined;
 
+        // [TreeView.tsx] dentro de loadTreeData(), no forEach das colunas
         if (col === "aplicacaoNormativo") {
-          const lang = getUserLanguage();
-          if (lang === "pt") {
-            select = `${col}/Id,${col}/DescTipoAplicacaoPT`;
-          } else if (lang === "es") {
-            select = `${col}/Id,${col}/DescTipoAplicacaoES`;
-          } else {
-            select = `${col}/Id,${col}/DescTipoAplicacaoPT`;
-          }
+          // IMPORTANTE: nunca condicionar por idioma aqui.
+          // Sempre traga Id + ambos os rótulos (PT e ES) para que o JSON salvo fique "agnóstico" de idioma.
+          select = `${col}/Id,${col}/DescTipoAplicacaoPT,${col}/DescTipoAplicacaoES`;
           expand = col;
         } else {
           const colMeta = metadataColumnTypes?.[col];
@@ -261,6 +257,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
             expand = col.split("/")[0];
           }
         }
+
 
         finalSelectColumns.push(select);
         if (expand && !expandStatements.includes(expand)) {
@@ -375,18 +372,34 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
   private getFieldValue = (item: any, name: string): any => {
     if (!item || !name) return "";
-
     let val = item[name];
+
     if (val !== undefined) {
-      if (typeof val === "object" && val !== null) {
-        if (Array.isArray(val)) {
-          return val.map(v =>
-            v?.Title ?? v?.Label ?? v?.LookupValue ?? v?.Sigla ?? String(v)
-          ).join("; ");
-        }
-        return val.Title ?? val.Label ?? val.LookupValue ?? val.Sigla ?? val.DescTipoAplicacaoPT ?? val.DescTipoAplicacaoES ?? "";
+      if (typeof val === "object" && val !== null && name === "aplicacaoNormativo") {
+        const lang = (getUserLanguage() || "pt").toLowerCase();
+        const display =
+          lang.startsWith("es")
+            ? (val.DescTipoAplicacaoES ?? val.DescTipoAplicacaoPT ?? val.Title ?? val.Label ?? val.LookupValue ?? val.Sigla ?? "")
+            : (val.DescTipoAplicacaoPT ?? val.DescTipoAplicacaoES ?? val.Title ?? val.Label ?? val.LookupValue ?? val.Sigla ?? "");
+        return display;
       }
 
+      if (typeof val === "object" && val !== null) {
+        if (Array.isArray(val)) {
+          return val
+            .map(v => v?.Title ?? v?.Label ?? v?.LookupValue ?? v?.Sigla ?? v?.DescTipoAplicacaoPT ?? v?.DescTipoAplicacaoES ?? String(v))
+            .join("; ");
+        }
+        return (
+          val.Title ??
+          val.Label ??
+          val.LookupValue ??
+          val.Sigla ??
+          val.DescTipoAplicacaoPT ??
+          val.DescTipoAplicacaoES ??
+          ""
+        );
+      }
       if (typeof val === "string" && val.includes(";#")) {
         const parts = val.split(";#");
         return parts[parts.length - 1] ?? "";
