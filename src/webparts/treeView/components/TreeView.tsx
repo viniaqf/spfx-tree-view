@@ -760,6 +760,12 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   public render(): React.ReactElement<ITreeViewProps> {
     const { loading, error, treeData, iframeUrl, selectedKey } = this.state;
 
+    const lang = (getUserLanguage() || "pt").toLowerCase();
+    const newTitle =
+      lang.startsWith("es")
+        ? (this.props.customLibraryTitleES?.trim() || "")
+        : (this.props.customLibraryTitlePT?.trim() || "");
+
     const renderTreeNodes = (nodes: ITreeNode[]) => (
       <ul className={styles.treeList}>
         {nodes.map(node => (
@@ -822,6 +828,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
               url={iframeUrl}
               listTitle={this.props.selectedLibraryTitle}
               emptyMessage={t.select_item_to_show_normativos}
+              newTitle={newTitle}
             />
           </div>
         </SplitterLayout>
