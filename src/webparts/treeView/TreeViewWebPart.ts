@@ -386,22 +386,20 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
                   disabled: this._documentLibraryOptions.length === 0,
                 }),
                 PropertyPaneTextField("customLibraryTitlePT", {
-                  label: "Nome da biblioteca em PT",
-                  description:
-                    "Se for definido, este nome será exibido no lugar do título original da biblioteca em português.",
+                  label: t.libraryNamePT,
+                  description: t.libraryNamePTDescription,
                   placeholder:
                     this.properties.selectedLibraryTitle ||
-                    "Título original da biblioteca.",
+                    t.originalLibraryTitle,
                   maxLength: 100,
                   disabled: !this.properties.selectedLibraryUrl,
                 }),
                 PropertyPaneTextField("customLibraryTitleES", {
-                  label: "Nome da biblioteca em ES",
-                  description:
-                    "Se for definido, este nome será exibido no lugar do título original da biblioteca em espanhol.",
+                  label: t.libraryNameES,
+                  description: t.libraryNameES,
                   placeholder:
                     this.properties.selectedLibraryTitle ||
-                    "Título original da biblioteca.",
+                    t.originalLibraryTitle,
                   maxLength: 100,
                   disabled: !this.properties.selectedLibraryUrl,
                 }),

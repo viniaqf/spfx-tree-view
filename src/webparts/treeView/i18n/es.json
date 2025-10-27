@@ -21,5 +21,10 @@
   "no_items_found_filter": "No se encontró ningún ítem con el filtro proporcionado.",
   "select_item_to_show_normativos": "Por favor, seleccione un ítem del menú para mostrar los normativos",
   "reloadMetadata": "Recargar Metadatos",
-  "updating": "Actualizando..."
+  "updating": "Actualizando...",
+  "libraryNamePT": "Nombre de la biblioteca en PT",
+  "libraryNameES": "Nombre de la biblioteca en ES",
+  "libraryNamePTDescription": "Si se define, este nombre se mostrará en lugar del título original de la biblioteca en portugués.",
+  "originalLibraryTitle": "Título original de la biblioteca.",
+  "libraryNameESDescription": "Si se define, este nombre se mostrará en lugar del título original de la biblioteca en español."
 }
