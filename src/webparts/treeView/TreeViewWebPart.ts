@@ -34,6 +34,8 @@ export interface ITreeViewWebPartProps {
   metadataColumnTypes?: {
     [internalName: string]: { type: string; lookupField?: string };
   };
+  customLibraryTitlePT?: string;
+  customLibraryTitleES?: string;
 }
 
 const t = getTranslations();
@@ -64,6 +66,8 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
         metadataColumn2: this.properties.metadataColumn2,
         metadataColumn3: this.properties.metadataColumn3,
         metadataColumnTypes: this._columnTypesMap,
+        customLibraryTitlePT: this.properties.customLibraryTitlePT, //SNO365-89
+        customLibraryTitleES: this.properties.customLibraryTitleES, //SNO365-89
       }
     );
 
@@ -380,6 +384,26 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
                   options: this._documentLibraryOptions,
                   selectedKey: this.properties.selectedLibraryUrl,
                   disabled: this._documentLibraryOptions.length === 0,
+                }),
+                PropertyPaneTextField("customLibraryTitlePT", {
+                  label: "Nome da biblioteca em PT",
+                  description:
+                    "Se for definido, este nome será exibido no lugar do título original da biblioteca em português.",
+                  placeholder:
+                    this.properties.selectedLibraryTitle ||
+                    "Título original da biblioteca.",
+                  maxLength: 100,
+                  disabled: !this.properties.selectedLibraryUrl,
+                }),
+                PropertyPaneTextField("customLibraryTitleES", {
+                  label: "Nome da biblioteca em ES",
+                  description:
+                    "Se for definido, este nome será exibido no lugar do título original da biblioteca em espanhol.",
+                  placeholder:
+                    this.properties.selectedLibraryTitle ||
+                    "Título original da biblioteca.",
+                  maxLength: 100,
+                  disabled: !this.properties.selectedLibraryUrl,
                 }),
                 PropertyPaneDropdown("metadataColumn1", {
                   label: t.metadata_column_level_1,
