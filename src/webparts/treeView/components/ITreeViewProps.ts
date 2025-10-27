@@ -1,7 +1,7 @@
 // src/webparts/treeView/components/ITreeViewProps.ts
 
-import { WebPartContext } from '@microsoft/sp-webpart-base';
-import { ReactNode } from 'react';
+import { WebPartContext } from "@microsoft/sp-webpart-base";
+import { ReactNode } from "react";
 
 export interface ITreeViewProps {
   //description: string;
@@ -15,6 +15,10 @@ export interface ITreeViewProps {
   metadataColumn1?: string; // Coluna de metadados para o Nível 1
   metadataColumn2?: string; // Coluna de metadados para o Nível 2
   metadataColumn3?: string; // Coluna de metadados para o Nível 3
-  metadataColumnTypes?: { [internalName: string]: { type: string; lookupField?: string } }; // <-- Atualize para isso
+  metadataColumnTypes?: {
+    [internalName: string]: { type: string; lookupField?: string };
+  };
   children?: ReactNode;
+  customLibraryTitlePT?: string; //SNO365-89
+  customLibraryTitleES?: string; //SNO365-89
 }
