@@ -14,6 +14,7 @@ interface IframePreviewProps {
     filterField?: string; // campo usado no filtro (para o fallback)
     filterValue?: string; // valor do filtro (para o fallback)
     emptyMessage?: string;
+    newTitle?: string
 }
 
 const containerStyle: React.CSSProperties = {
@@ -52,7 +53,8 @@ export default function IframePreview(props: IframePreviewProps) {
         listTitle,
         filterField,
         filterValue,
-        emptyMessage
+        emptyMessage,
+        newTitle,
     } = props;
 
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -65,6 +67,20 @@ export default function IframePreview(props: IframePreviewProps) {
 
 
     const t = getTranslations();
+
+    function setHeaderTitleText(doc: Document, text: string): boolean {
+        const el = doc.querySelector(
+            'div[data-automationid="headerTitleButton"], button[data-automationid="headerTitleButton"]'
+        ) as HTMLElement | null;
+        if (!el) return false;
+
+        el.textContent = text;
+        el.setAttribute('title', text);
+        el.style.display = 'flex';
+        el.style.alignItems = 'center';
+        return true;
+    }
+
 
 
     // Tenta detectar bloqueio do iframe. Se for bloqueado por X-Frame-Options/CSP, acessar contentDocument vai lançar.
@@ -103,6 +119,21 @@ export default function IframePreview(props: IframePreviewProps) {
                 //  Sinaliza que o iframe NÃO está bloqueado
                 setIframeBlocked(false);
 
+                if (newTitle && newTitle.trim()) {
+                    const injectNow = () => setHeaderTitleText(doc, newTitle!.trim());
+
+                    if (!injectNow()) {
+                        // se o header ainda não está no DOM, observa até aparecer
+                        const mo = new MutationObserver(() => {
+                            if (injectNow()) {
+                                mo.disconnect();
+                            }
+                        });
+                        mo.observe(doc.body, { childList: true, subtree: true });
+                    }
+                }
+
+
                 const bodyText = doc.body?.innerText || '';
                 if (bodyText.trim().length === 0) {
                     setTimeout(() => {
@@ -122,7 +153,10 @@ export default function IframePreview(props: IframePreviewProps) {
             // Cross-origin ou bloqueio total: não dá para acessar o DOM do iframe
             setIframeBlocked(true);
         }
+
     };
+
+
 
 
     // timeout para detectar quando onLoad não ocorrer (algumas vezes o browser ignora o load)
@@ -196,6 +230,7 @@ export default function IframePreview(props: IframePreviewProps) {
                         height="100%"
                         style={{ border: 'none', minHeight: height }}
                         onLoad={onIframeLoad}
+
                     />
                 </div>
             ) : (
