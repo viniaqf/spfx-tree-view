@@ -766,6 +766,15 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         ? (this.props.customLibraryTitleES?.trim() || "")
         : (this.props.customLibraryTitlePT?.trim() || "");
 
+    let processedTreeData = treeData;
+
+    if (treeData.length > 0 && newTitle) {
+      processedTreeData = [
+        { ...treeData[0], label: newTitle },
+        ...treeData.slice(1)
+      ];
+    }
+
     const renderTreeNodes = (nodes: ITreeNode[]) => (
       <ul className={styles.treeList}>
         {nodes.map(node => (
@@ -818,7 +827,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
                     ? t.noMetadata
                     : t.noDocuments}</p>
               )}
-              {!loading && !error && treeData.length > 0 && renderTreeNodes(treeData)}
+              {!loading && !error && treeData.length > 0 && renderTreeNodes(processedTreeData)}
             </div>
           </div>
 
