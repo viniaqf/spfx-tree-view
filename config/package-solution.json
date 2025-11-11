@@ -3,7 +3,7 @@
   "solution": {
     "name": "tree-view-client-side-solution",
     "id": "0c0ed5f1-dec6-4b06-8e68-433419c6dcc1",
-    "version": "1.10.0.0",
+    "version": "2.1.0.0",
     "includeClientSideAssets": true,
     "skipFeatureDeployment": true,
     "isDomainIsolated": false,
