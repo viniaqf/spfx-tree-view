@@ -45,6 +45,16 @@ interface IComponentTreeViewState {
 const t = getTranslations();
 
 export default class TreeView extends React.Component<ITreeViewProps, IComponentTreeViewState> {
+
+  //snapshot usado somente durante o refresh forçado (botão "Atualizar Dados")
+  private _refreshSnapshot: {
+    selectedLibraryUrl?: string;
+    metadataColumn1?: string;
+    metadataColumn2?: string;
+    metadataColumn3?: string;
+    metadataColumnTypes?: { [key: string]: { type: string; lookupField?: string } };
+  } | null = null;
+
   constructor(props: ITreeViewProps) {
     super(props);
     this.state = {
@@ -60,6 +70,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       expandedKeys: [],
       selectedKeyToRestore: null,
     };
+
   }
 
   // Verifica se a URL existe (retorna true se status 200-299)
@@ -71,6 +82,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       return false;
     }
   }
+
 
   private async getDefaultLibraryViewUrl(): Promise<string> {
     const webUrl = this.props.context.pageContext.web.absoluteUrl;
@@ -125,27 +137,24 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
+    const libraryChanged =
+      this.props.selectedLibraryUrl !== prevProps.selectedLibraryUrl;
 
-    if (!prevProps.selectedLibraryUrl && this.props.selectedLibraryUrl) {
-      console.log("Choque de propriedade detectado: Restaurando dados após URL ser restaurada.");
-      sessionStorage.removeItem('treeViewCacheData');
-      // O estado isRefreshing deve ser true aqui, e será resetado dentro de buildTreeFromData.
-      await this.checkAndLoadCache();
-      return;
-    }
-
-    // ⬅️ Condição 2: Mudança normal de propriedades de configuração
-    if (
-      this.props.selectedLibraryUrl !== prevProps.selectedLibraryUrl ||
+    const columnsChanged =
       this.props.metadataColumn1 !== prevProps.metadataColumn1 ||
       this.props.metadataColumn2 !== prevProps.metadataColumn2 ||
-      this.props.metadataColumn3 !== prevProps.metadataColumn3
-    ) {
-      // Se as propriedades mudaram, limpa o cache e recarrega os dados.
+      this.props.metadataColumn3 !== prevProps.metadataColumn3;
+
+    // Sempre que a biblioteca ou as colunas de metadados mudarem,
+    // limpamos o cache e recarregamos os dados.
+    if (libraryChanged || columnsChanged) {
+      console.log("Propriedades de biblioteca/colunas mudaram. Recarregando cache...");
       sessionStorage.removeItem('treeViewCacheData');
       await this.checkAndLoadCache();
     }
   }
+
+
 
   /**
    * Método para verificar e carregar os dados do cache.
@@ -187,6 +196,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     const selectedKeyToRestore = this.state.selectedKey;
 
     // Guarda o estado no sessionStorage (caso o Web Part seja desmontado)
+    // Guarda o estado no sessionStorage (caso o Web Part seja desmontado)
     try {
       sessionStorage.setItem(
         'treeViewUiState',
@@ -199,12 +209,22 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       console.warn("Não foi possível salvar o estado da UI no sessionStorage:", e);
     }
 
+    //  ADD: tira um snapshot das props ANTES do choque de propriedades
+    this._refreshSnapshot = {
+      selectedLibraryUrl: this.props.selectedLibraryUrl,
+      metadataColumn1: this.props.metadataColumn1,
+      metadataColumn2: this.props.metadataColumn2,
+      metadataColumn3: this.props.metadataColumn3,
+      metadataColumnTypes: this.props.metadataColumnTypes
+    };
+
     this.setState({
       isRefreshing: true,
       loading: true,
       expandedKeys,
       selectedKeyToRestore
     });
+
 
     try {
       // Chama o método da Web Part que limpa o cache e faz o choque de propriedade
@@ -330,8 +350,12 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       expandedKeys: [],
       selectedKeyToRestore: null
     }, () => {
+      // snapshot não é mais necessário
+      this._refreshSnapshot = null;
+
       this.restoreExpandedNodes(restoredExpandedKeys);
     });
+
   }
 
   /**
@@ -421,12 +445,36 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
   private async loadTreeData(): Promise<void> {
     const {
-      selectedLibraryUrl,
-      metadataColumn1,
-      metadataColumn2,
-      metadataColumn3,
-      metadataColumnTypes
+      selectedLibraryUrl: propSelectedLibraryUrl,
+      metadataColumn1: propMetadataColumn1,
+      metadataColumn2: propMetadataColumn2,
+      metadataColumn3: propMetadataColumn3,
+      metadataColumnTypes: propMetadataColumnTypes
     } = this.props;
+
+    // Se estamos em refresh e temos snapshot, usamos o snapshot.
+    // Isso evita pegar valores nulos/undefined no meio do choque de propriedades.
+    const useSnapshot = this.state.isRefreshing && this._refreshSnapshot;
+
+    const selectedLibraryUrl = useSnapshot && this._refreshSnapshot!.selectedLibraryUrl
+      ? this._refreshSnapshot!.selectedLibraryUrl
+      : propSelectedLibraryUrl;
+
+    const metadataColumn1 = useSnapshot && this._refreshSnapshot!.metadataColumn1 !== undefined
+      ? this._refreshSnapshot!.metadataColumn1
+      : propMetadataColumn1;
+
+    const metadataColumn2 = useSnapshot && this._refreshSnapshot!.metadataColumn2 !== undefined
+      ? this._refreshSnapshot!.metadataColumn2
+      : propMetadataColumn2;
+
+    const metadataColumn3 = useSnapshot && this._refreshSnapshot!.metadataColumn3 !== undefined
+      ? this._refreshSnapshot!.metadataColumn3
+      : propMetadataColumn3;
+
+    const metadataColumnTypes = useSnapshot && this._refreshSnapshot!.metadataColumnTypes
+      ? this._refreshSnapshot!.metadataColumnTypes
+      : propMetadataColumnTypes;
 
     // Sem URL de biblioteca: nada pra carregar
     if (!selectedLibraryUrl) {
