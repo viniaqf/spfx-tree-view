@@ -431,7 +431,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       metadataColumnTypes
     } = this.props;
 
-    // ⬅️ NOVO: Se a URL da biblioteca for nula (durante o choque de propriedade), apenas retorna.
     if (!selectedLibraryUrl) {
       this.setState({ loading: false, isRefreshing: false, error: t.noLibrary });
       return;
@@ -475,30 +474,35 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           select = `${baseInternalName}/Id,${baseInternalName}/DescTipoAplicacaoPT,${baseInternalName}/DescTipoAplicacaoES`;
           expand = baseInternalName;
         } else {
-          // ⬅️ CORREÇÃO: Tratar campos que exigem expansão (Area_x0020_Gestora, etc.)
-          const colMeta = metadataColumnTypes?.[col] || metadataColumnTypes?.[baseInternalName];
+          const colMeta = this.props.metadataColumnTypes?.[col] || this.props.metadataColumnTypes?.[baseInternalName];
 
-          if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
-            const field = colMeta.lookupField || explicitFieldFromCol || "Title";
-            // Garante que o campo de Lookup é selecionado corretamente: BaseInternalName/FieldToSelect
+          const isComplexField = colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata");
+          const needsExpansionFallback = baseInternalName.includes('_x0020_'); // Adicionado como fallback seguro para Area_x0020_Gestora
+
+          if (isComplexField || needsExpansionFallback) {
+            const field = colMeta?.lookupField || explicitFieldFromCol || "Title";
+            // Garante que o campo de Lookup é selecionado corretamente
             select = `${baseInternalName}/Id,${baseInternalName}/${field}`;
-            expand = baseInternalName; // BaseInternalName vai para o $expand
+            expand = baseInternalName;
           } else if ((baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/")) {
-            // Lógica existente para Managed Metadata V1 (que também precisa de expand)
+            // Lógica existente para Managed Metadata V1
             const normalized = baseInternalName.endsWith("_0")
               ? baseInternalName.slice(0, -2)
               : baseInternalName.slice(0, -1);
             select = normalized;
             expand = normalized;
           } else if (col.includes("/")) {
-            // Lógica para campos expandidos já definidos na prop
+            // Lógica para campos expandidos já definidos na prop (ex: campo/propriedade)
             expand = baseInternalName;
             select = col;
           }
         }
 
         if (select) {
-          finalSelectColumns.push(select);
+          // Verifica se o select já existe antes de adicionar
+          if (!finalSelectColumns.some(c => c.split(',').includes(select))) {
+            finalSelectColumns.push(select);
+          }
         }
         if (expand && !expandStatements.includes(expand)) {
           expandStatements.push(expand);
@@ -1062,7 +1066,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     const isMissingLibraryConfig = !selectedLibraryUrl;
 
-    if (isMissingLibraryConfig && !isRefreshing) { // ⬅️ Condição de erro da Web Part ajustada
+    if (isMissingLibraryConfig && !isRefreshing) {
       return (
         <div className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`} style={{ minHeight: '100px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <p style={{ color: 'red', textAlign: 'center' }}>
@@ -1072,7 +1076,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       );
     }
 
-    // ⬅️ Overlay de Loading Cobrindo TODO o Web Part durante o refresh forçado
     if (isRefreshing) {
       return (
         <div className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`} style={{ position: 'relative', minHeight: '300px' }}>
