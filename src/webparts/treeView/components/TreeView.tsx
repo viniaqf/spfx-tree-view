@@ -429,16 +429,16 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       metadataColumn1,
       metadataColumn2,
       metadataColumn3,
-      metadataColumnTypes // Contém os tipos de coluna do SharePoint
+      metadataColumnTypes
     } = this.props;
 
-    // Se a URL da biblioteca for nula (durante o choque de propriedade), apenas retorna.
+    // Sem URL de biblioteca: nada pra carregar
     if (!selectedLibraryUrl) {
       this.setState({ loading: false, isRefreshing: false, error: t.noLibrary });
       return;
     }
 
-    // Garantir que a mensagem de erro da Web Part não persista
+    // Limpa eventual erro de "sem biblioteca" e começa loading
     const currentError = this.state.error === t.noLibrary ? "" : this.state.error;
     this.setState({ loading: true, error: currentError });
 
@@ -452,102 +452,114 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         throw new Error(t.error_library_url_not_found);
       }
 
-      // Lógica existente para obter o ID da lista 'aplicacaoNormativo'
-      if (metadataColumn1 === "aplicacaoNormativo" ||
+      // Caso especial: aplicacaoNormativo
+      if (
+        metadataColumn1 === "aplicacaoNormativo" ||
         metadataColumn2 === "aplicacaoNormativo" ||
-        metadataColumn3 === "aplicacaoNormativo") {
+        metadataColumn3 === "aplicacaoNormativo"
+      ) {
         await this.getAplicacaoNormativoListId(listInfo.Id);
       }
 
-
-      const KNOWN_COMPLEX_FIELDS = [
-        "Area_x0020_Gestora", // Campo problemático 1
-        "siglaDoTipoDoNormativo", // Campo problemático 2 (exige expansão no erro)
-        "aplicacaoNormativo" // Já tem tratamento especial, mas mantido aqui por redundância
-      ];
-
-
       const columnsToProcess = [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean);
-      const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"];
+      const finalSelectColumns: string[] = [
+        "ID",
+        "FileRef",
+        "FileLeafRef",
+        "ContentTypeId",
+        "FSObjType"
+      ];
       const expandStatements: string[] = [];
 
-      // Mapeamento dinâmico baseado no tipo de coluna (metadataColumnTypes)
       columnsToProcess.forEach(col => {
         if (!col) return;
 
-        const baseInternalName = col.split("/")[0];
-        const explicitFieldFromCol = col.includes("/") ? col.split("/")[1] : undefined;
+        const baseInternalName = col.split("/")[0];               // ex: Area_x0020_Gestora
+        const explicitFieldFromCol = col.includes("/")            // ex: "Title" em "Area_x0020_Gestora/Title"
+          ? col.split("/")[1]
+          : undefined;
 
-        let select: string | undefined;
-        let expand: string | undefined;
-
-        // Tenta obter os metadados da coluna.
         const colMeta = metadataColumnTypes?.[col] || metadataColumnTypes?.[baseInternalName];
 
-        // 1. Definição da complexidade
-        const isKnownComplex = KNOWN_COMPLEX_FIELDS.includes(baseInternalName);
-        const isComplexFromMeta = colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata");
-        const isMMDV1 = (baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/");
-
-        // Se for um campo complexo conhecido OU detectado pelos metadados
-        if (isKnownComplex || isComplexFromMeta) {
-          // 1.1. Tratamento específico para 'aplicacaoNormativo' (mantido por customizações de PT/ES)
-          if (baseInternalName === "aplicacaoNormativo") {
-            select = `${baseInternalName}/Id,${baseInternalName}/DescTipoAplicacaoPT,${baseInternalName}/DescTipoAplicacaoES`;
-            expand = baseInternalName;
-          } else {
-            // 1.2. Tratamento genérico para Lookups, MMD e User
-            const field = colMeta?.lookupField || explicitFieldFromCol || "Title";
-            // Para Lookups, MMD e User, SEMPRE selecione o ID e o campo de destino.
-            select = `${baseInternalName}/Id,${baseInternalName}/${field}`;
-            expand = baseInternalName;
+        // --- 1) Campo especial: aplicacaoNormativo (PT/ES) ---
+        if (baseInternalName === "aplicacaoNormativo") {
+          const selects = [
+            "aplicacaoNormativo/Id",
+            "aplicacaoNormativo/DescTipoAplicacaoPT",
+            "aplicacaoNormativo/DescTipoAplicacaoES"
+          ];
+          selects.forEach(s => {
+            if (!finalSelectColumns.includes(s)) {
+              finalSelectColumns.push(s);
+            }
+          });
+          if (!expandStatements.includes("aplicacaoNormativo")) {
+            expandStatements.push("aplicacaoNormativo");
           }
+          return;
         }
-        else if (isMMDV1) {
-          // 2. Lógica para MMD V1 (ex: TaxKeyword0)
+
+        // --- 2) Lookup / User / ManagedMetadata (via metadataColumnTypes) ---
+        if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
+          const field = colMeta.lookupField || explicitFieldFromCol || "Title";
+
+          const selects = [
+            `${baseInternalName}/Id`,
+            `${baseInternalName}/${field}`
+          ];
+
+          selects.forEach(s => {
+            if (!finalSelectColumns.includes(s)) {
+              finalSelectColumns.push(s);
+            }
+          });
+
+          if (!expandStatements.includes(baseInternalName)) {
+            expandStatements.push(baseInternalName);
+          }
+          return;
+        }
+
+        // --- 3) MMD v1 (campo terminando com 0 ou _0) ---
+        if ((baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/")) {
           const normalized = baseInternalName.endsWith("_0")
             ? baseInternalName.slice(0, -2)
             : baseInternalName.slice(0, -1);
-          select = normalized;
-          expand = normalized;
-        }
-        else if (col.includes("/")) {
-          // 3. Lógica para campos que já foram configurados com a barra (ex: Link/Url)
-          expand = baseInternalName;
-          select = col;
-        }
-        else {
-          // 4. Campos Simples (Text, Number, Date, etc.)
-          select = baseInternalName;
+
+          if (!finalSelectColumns.includes(normalized)) {
+            finalSelectColumns.push(normalized);
+          }
+          if (!expandStatements.includes(normalized)) {
+            expandStatements.push(normalized);
+          }
+          return;
         }
 
-        // Finalização da query
-        if (select) {
-          // Adiciona o campo ou os campos separados por vírgula ao select final
-          select.split(',').forEach(s => {
-            const trimmedS = s.trim();
-            if (trimmedS && !finalSelectColumns.includes(trimmedS)) {
-              finalSelectColumns.push(trimmedS);
-            }
-          });
+        // --- 4) Coluna configurada como "Campo/Algo" diretamente no WebPart ---
+        if (col.includes("/")) {
+          // ex: "Area_x0020_Gestora/Title"
+          if (!finalSelectColumns.includes(col)) {
+            finalSelectColumns.push(col);
+          }
+          if (!expandStatements.includes(baseInternalName)) {
+            expandStatements.push(baseInternalName);
+          }
+          return;
         }
-        if (expand && !expandStatements.includes(expand)) {
-          expandStatements.push(expand);
+
+        // --- 5) Campo simples (Text, Number, Date, etc.) ---
+        if (!finalSelectColumns.includes(baseInternalName)) {
+          finalSelectColumns.push(baseInternalName);
         }
       });
 
-      // Filtra finalSelectColumns para remover duplicatas e entradas vazias
-      const uniqueFinalSelectColumns = Array.from(new Set(finalSelectColumns.filter(c => c && c.toLowerCase() !== 'undefined' && !c.includes(','))));
-      const uniqueExpandStatements = Array.from(new Set(expandStatements.filter(e => e && e.toLowerCase() !== 'undefined')));
-
-      // Debug: Log das queries finais
-      console.log("FINAL $SELECT:", uniqueFinalSelectColumns.join(','));
-      console.log("FINAL $EXPAND:", uniqueExpandStatements.join(','));
-
+      // Debug opcional
+      console.log("FINAL $SELECT:", finalSelectColumns.join(", "));
+      console.log("FINAL $EXPAND:", expandStatements.join(", "));
 
       const allItems = await pnp.sp.web.lists.getById(listInfo.Id).items
-        .select(...uniqueFinalSelectColumns)
-        .expand(...uniqueExpandStatements)
+        .select(...finalSelectColumns)
+        .expand(...expandStatements)
         .getAll();
 
       // Salva os dados e as colunas usadas no cache
@@ -566,7 +578,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         );
         const library = selectedLibraryUrl || "";
 
-        // Re-publica o novo JSON no cache persistente
         await TreeViewConfigService.upsertPublishedData(
           pageUrl,
           JSON.stringify(allItems),
@@ -578,7 +589,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       }
 
     } catch (error) {
-      console.error("ERRO GRAVE NA BUSCA DE DADOS:", error); // Log do erro
+      console.error("ERRO GRAVE NA BUSCA DE DADOS:", error);
       this.setState({
         error: `${t.error_loading_data} ${escape((error as any).message || JSON.stringify(error))}`,
         loading: false,
@@ -588,8 +599,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       });
     }
   }
-
-  // ... [restante da classe inalterado]
 
   /**
    * Obtém o ID da lista referenciada pela coluna "aplicacaoNormativo".
@@ -1109,48 +1118,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       );
     }
 
-    if (isRefreshing) {
-      return (
-        <div className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`} style={{ position: 'relative', minHeight: '300px' }}>
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            zIndex: 10,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            border: '1px solid #ccc',
-            borderRadius: '6px'
-          }}>
-            <Spinner size={SpinnerSize.large} label={t.reloading || "Atualizando dados da biblioteca..."} />
-            <p style={{ marginTop: '10px' }}>Por favor, aguarde.</p>
-          </div>
-          {/* Renderiza o conteúdo subjacente para manter o tamanho */}
-          <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`}>
-            {/* Renderiza o botão desabilitado para o usuário não clicar novamente */}
-            <div style={{ padding: '5px 10px 10px 10px' }}>
-              <PrimaryButton
-                text={t.reloadContents}
-                disabled={true}
-                iconProps={{ iconName: 'Refresh' }}
-                styles={{ root: { width: '100%' } }}
-              />
-            </div>
-            <SplitterLayout percentage primaryIndex={1} secondaryInitialSize={20} primaryMinSize={40} secondaryMinSize={10}>
-              <div className={styles.treeView}></div>
-              <div className={styles.iframeContainer}></div>
-            </SplitterLayout>
-          </section>
-        </div>
-      );
-    }
-
-
     return (
       <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`}>
         <SplitterLayout
@@ -1162,13 +1129,21 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         >
           {/* Painel esquerdo: Árvore */}
           <div className={styles.treeView}>
-            {/* Botão de atualização visível adicionado aqui */}
+            {/* Overlay de refresh só sobre o menu */}
+            {isRefreshing && (
+              <div className={styles.refreshOverlay}>
+                <Spinner size={SpinnerSize.large} label={t.reloading || "Atualizando dados da biblioteca..."} />
+                <p style={{ marginTop: '10px' }}>Por favor, aguarde.</p>
+              </div>
+            )}
+
+            {/* Botão de atualização visível */}
             {onForceRefresh && selectedLibraryUrl && (
               <div style={{ padding: '5px 10px 10px 10px' }}>
                 <PrimaryButton
                   onClick={this.handleForceRefresh}
                   text={t.reloadContents || "Atualizar Dados"}
-                  disabled={loading}
+                  disabled={loading || isRefreshing}
                   iconProps={{ iconName: 'Refresh' }}
                   styles={{ root: { width: '100%' } }}
                 />
