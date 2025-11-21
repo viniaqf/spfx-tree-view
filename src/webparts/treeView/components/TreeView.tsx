@@ -543,8 +543,13 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           return;
         }
 
-        // --- 2) HARD-CODE: Area_x0020_Gestora como Lookup ---
+        /// --- 2) HARD-CODE: Area_x0020_Gestora como Lookup ---
         if (baseInternalName === "Area_x0020_Gestora") {
+          // Garante que o campo base para EXPAND seja adicionado
+          if (!expandStatements.includes("Area_x0020_Gestora")) {
+            expandStatements.push("Area_x0020_Gestora");
+          }
+          // Garante que os campos de destino para SELECT sejam adicionados
           const selects = [
             "Area_x0020_Gestora/Id",
             "Area_x0020_Gestora/Title"
@@ -554,10 +559,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
               finalSelectColumns.push(s);
             }
           });
-          if (!expandStatements.includes("Area_x0020_Gestora")) {
-            expandStatements.push("Area_x0020_Gestora");
-          }
-          return; // importantíssimo: não deixa cair nos casos genéricos
+          return; // Importante para não cair na lógica genérica
         }
 
         // --- 3) Lookup / User / ManagedMetadata (via metadataColumnTypes) ---
@@ -596,14 +598,16 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           return;
         }
 
-        // --- 5) Coluna configurada como "Campo/Algo" diretamente no WebPart ---
+        /// --- 5) Coluna configurada como "Campo/Algo" diretamente no WebPart ---
         if (col.includes("/")) {
-          // ex: "Area_x0020_Gestora/Title"
+          const [base, prop] = col.split("/");
+          // Verifica se a propriedade que você quer já está em SELECT
           if (!finalSelectColumns.includes(col)) {
             finalSelectColumns.push(col);
           }
-          if (!expandStatements.includes(baseInternalName)) {
-            expandStatements.push(baseInternalName);
+          // E garante que o campo base está no EXPAND
+          if (!expandStatements.includes(base)) {
+            expandStatements.push(base);
           }
           return;
         }
