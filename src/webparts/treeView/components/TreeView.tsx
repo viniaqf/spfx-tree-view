@@ -457,23 +457,30 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       columnsToProcess.forEach(col => {
         if (!col) return;
 
-        let select = col;
+        const baseInternalName = col.split("/")[0];
+        const explicitFieldFromCol = col.includes("/") ? col.split("/")[1] : undefined;
+
+        let select = baseInternalName;
         let expand: string | undefined;
 
-        if (col === "aplicacaoNormativo") {
-          select = `${col}/Id,${col}/DescTipoAplicacaoPT,${col}/DescTipoAplicacaoES`;
-          expand = col;
+        if (baseInternalName === "aplicacaoNormativo") {
+          select = `${baseInternalName}/Id,${baseInternalName}/DescTipoAplicacaoPT,${baseInternalName}/DescTipoAplicacaoES`;
+          expand = baseInternalName;
         } else {
-          const colMeta = metadataColumnTypes?.[col];
+          const colMeta = metadataColumnTypes?.[col] || metadataColumnTypes?.[baseInternalName];
+
           if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
-            const field = colMeta.lookupField || "Title";
-            select = `${col}/Id,${col}/${field}`;
-            expand = col;
-          } else if ((col.endsWith("0") || col.endsWith("_0")) && !col.includes("/")) {
-            select = col.endsWith("_0") ? col.slice(0, -2) : col.slice(0, -1);
-            expand = select;
+            const field = colMeta.lookupField || explicitFieldFromCol || "Title";
+            select = `${baseInternalName}/Id,${baseInternalName}/${field}`;
+            expand = baseInternalName;
+          } else if ((baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/")) {
+            const normalized = baseInternalName.endsWith("_0")
+              ? baseInternalName.slice(0, -2)
+              : baseInternalName.slice(0, -1);
+            select = normalized;
+            expand = normalized;
           } else if (col.includes("/")) {
-            expand = col.split("/")[0];
+            expand = baseInternalName;
           }
         }
 
