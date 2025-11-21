@@ -103,6 +103,15 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     try {
       const cfg = await TreeViewConfigService.loadByPage(pageUrl);
 
+      // ⬅️ NOVO: Se selectedLibraryUrl estiver faltando aqui, e há PublishedTreeData, 
+      // mas o Web Part está no ciclo de choque, não faça nada. O componentDidUpdate fará o trabalho.
+      if (!this.props.selectedLibraryUrl) {
+        console.log("URL de biblioteca faltando no componentDidMount. Aguardando choque de propriedades ser concluído.");
+        // Se a Web Part está no estado 'nulo', não tente carregar nada ainda, apenas espere.
+        this.setState({ loading: true, isRefreshing: true });
+        return;
+      }
+
       if (cfg?.PublishedTreeData) {
         const allItems = JSON.parse(cfg.PublishedTreeData);
         this.setState({ allDocumentsCache: allItems });
@@ -118,19 +127,18 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
-    // Se isRefreshing é true, significa que o WebPart está no meio de um choque de propriedade.
-    // Ignoramos a mudança de selectedLibraryUrl para undefined/original, a menos que ele volte a estar definido.
-    if (this.state.isRefreshing) {
-      // Se a Web Part acabou de restaurar a selectedLibraryUrl (de undefined para um valor real),
-      // reiniciamos o ciclo de busca de dados.
-      if (!prevProps.selectedLibraryUrl && this.props.selectedLibraryUrl) {
-        sessionStorage.removeItem('treeViewCacheData');
-        await this.checkAndLoadCache();
-      }
+
+    // ⬅️ Condição 1: Estamos no meio de um refresh forçado (choque de propriedade)
+    // Se a Web Part acabou de restaurar a selectedLibraryUrl (de undefined para um valor real), reiniciamos.
+    if (!prevProps.selectedLibraryUrl && this.props.selectedLibraryUrl) {
+      console.log("Choque de propriedade detectado: Restaurando dados após URL ser restaurada.");
+      sessionStorage.removeItem('treeViewCacheData');
+      // O estado isRefreshing deve ser true aqui, e será resetado dentro de buildTreeFromData.
+      await this.checkAndLoadCache();
       return;
     }
 
-    // Comportamento normal quando o refresh não está ativo
+    // ⬅️ Condição 2: Mudança normal de propriedades de configuração
     if (
       this.props.selectedLibraryUrl !== prevProps.selectedLibraryUrl ||
       this.props.metadataColumn1 !== prevProps.metadataColumn1 ||
@@ -182,7 +190,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     const expandedKeys = this.findExpandedKeys(this.state.treeData);
     const selectedKeyToRestore = this.state.selectedKey;
 
-    // Guarda também no sessionStorage para sobreviver a um possível unmount/remount
+    // Guarda o estado no sessionStorage (caso o Web Part seja desmontado)
     try {
       sessionStorage.setItem(
         'treeViewUiState',
@@ -207,7 +215,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       await this.props.onForceRefresh();
     } catch (e) {
       console.error("Falha ao forçar a atualização dos dados da árvore:", e);
-      this.setState({ isRefreshing: false, loading: false }); // Garante que o botão destrava em caso de erro
+      this.setState({ isRefreshing: false, loading: false, error: t.error_loading_data });
     }
   }
 
@@ -269,10 +277,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   private buildTreeFromData(allItems: any[]): void {
     const { selectedLibraryUrl, selectedLibraryTitle, metadataColumn1 } = this.props;
 
-    // Tenta usar o estado que está em memória…
+    // Tenta usar o estado que está em memória (salvo em handleForceRefresh)
     let { expandedKeys, selectedKeyToRestore } = this.state;
 
-    // …e, se estiver vazio, tenta recuperar do sessionStorage (caso tenha havido unmount/remount).
+    // ...e, se estiver vazio, tenta recuperar do sessionStorage (caso tenha havido unmount/remount).
     if ((!expandedKeys || expandedKeys.length === 0) && !selectedKeyToRestore) {
       try {
         const rawUiState = sessionStorage.getItem('treeViewUiState');
@@ -348,7 +356,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   private getLevelFromKey(key: string): number {
     if (!key) return 0;
     const parts = key.split("-");
-    if (parts.length < 2) return 0;
+    // As chaves de metadados têm pelo menos 4 partes (coluna-valor-nível-query)
+    if (parts.length < 4) return 0;
     const maybe = parseInt(parts[parts.length - 2], 10);
     return isNaN(maybe) ? 0 : maybe;
   }
@@ -363,7 +372,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         treeData: this.setNodeExpanded(prev.treeData, nodeKey, true)
       }), async () => {
         const updated = this.findNodeInTree(this.state.treeData, nodeKey);
-        if (updated && updated.isFolder && (!updated.children || updated.children.length === 0)) {
+        if (updated && updated.isFolder && updated.children?.length === 0) {
           this.setState({ loading: true });
 
           const nextLevel = updated.level + 1;
@@ -416,23 +425,21 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   private async loadTreeData(): Promise<void> {
     const {
       selectedLibraryUrl,
-      selectedLibraryTitle,
       metadataColumn1,
       metadataColumn2,
       metadataColumn3,
       metadataColumnTypes
     } = this.props;
 
+    // ⬅️ NOVO: Se a URL da biblioteca for nula (durante o choque de propriedade), apenas retorna.
     if (!selectedLibraryUrl) {
-      this.setState({
-        loading: false,
-        error: t.noLibrary,
-        isRefreshing: false
-      });
+      this.setState({ loading: false, isRefreshing: false, error: t.noLibrary });
       return;
     }
 
-    this.setState({ loading: true, error: t.reloading });
+    // Garantir que a mensagem de erro da Web Part não persista
+    const currentError = this.state.error === t.noLibrary ? "" : this.state.error;
+    this.setState({ loading: true, error: currentError });
 
     try {
       const listInfo = (await pnp.sp.web.lists
@@ -454,6 +461,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"];
       const expandStatements: string[] = [];
 
+      // Mapeamento para garantir que $select e $expand incluam todos os campos Lookup/User/ManagedMetadata
       columnsToProcess.forEach(col => {
         if (!col) return;
 
@@ -467,32 +475,44 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           select = `${baseInternalName}/Id,${baseInternalName}/DescTipoAplicacaoPT,${baseInternalName}/DescTipoAplicacaoES`;
           expand = baseInternalName;
         } else {
+          // ⬅️ CORREÇÃO: Tratar campos que exigem expansão (Area_x0020_Gestora, etc.)
           const colMeta = metadataColumnTypes?.[col] || metadataColumnTypes?.[baseInternalName];
 
           if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
             const field = colMeta.lookupField || explicitFieldFromCol || "Title";
+            // Garante que o campo de Lookup é selecionado corretamente: BaseInternalName/FieldToSelect
             select = `${baseInternalName}/Id,${baseInternalName}/${field}`;
-            expand = baseInternalName;
+            expand = baseInternalName; // BaseInternalName vai para o $expand
           } else if ((baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/")) {
+            // Lógica existente para Managed Metadata V1 (que também precisa de expand)
             const normalized = baseInternalName.endsWith("_0")
               ? baseInternalName.slice(0, -2)
               : baseInternalName.slice(0, -1);
             select = normalized;
             expand = normalized;
           } else if (col.includes("/")) {
+            // Lógica para campos expandidos já definidos na prop
             expand = baseInternalName;
+            select = col;
           }
         }
 
-        finalSelectColumns.push(select);
+        if (select) {
+          finalSelectColumns.push(select);
+        }
         if (expand && !expandStatements.includes(expand)) {
           expandStatements.push(expand);
         }
       });
 
+      // Filtra finalSelectColumns para remover duplicatas e entradas vazias
+      const uniqueFinalSelectColumns = Array.from(new Set(finalSelectColumns.filter(c => c && c.toLowerCase() !== 'undefined')));
+      const uniqueExpandStatements = Array.from(new Set(expandStatements.filter(e => e && e.toLowerCase() !== 'undefined')));
+
+
       const allItems = await pnp.sp.web.lists.getById(listInfo.Id).items
-        .select(...finalSelectColumns)
-        .expand(...expandStatements)
+        .select(...uniqueFinalSelectColumns)
+        .expand(...uniqueExpandStatements)
         .getAll();
 
       // Salva os dados e as colunas usadas no cache
@@ -523,8 +543,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       }
 
     } catch (error) {
+      console.error("ERRO GRAVE NA BUSCA DE DADOS:", error); // Log do erro 400
       this.setState({
-        error: `${t.error_loading_data} ${escape((error as any).message)}`,
+        error: `${t.error_loading_data} ${escape((error as any).message || JSON.stringify(error))}`,
         loading: false,
         treeData: [],
         allDocumentsCache: [],
@@ -1041,7 +1062,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     const isMissingLibraryConfig = !selectedLibraryUrl;
 
-    if (isMissingLibraryConfig) {
+    if (isMissingLibraryConfig && !isRefreshing) { // ⬅️ Condição de erro da Web Part ajustada
       return (
         <div className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`} style={{ minHeight: '100px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <p style={{ color: 'red', textAlign: 'center' }}>
@@ -1050,6 +1071,49 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         </div>
       );
     }
+
+    // ⬅️ Overlay de Loading Cobrindo TODO o Web Part durante o refresh forçado
+    if (isRefreshing) {
+      return (
+        <div className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`} style={{ position: 'relative', minHeight: '300px' }}>
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            zIndex: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            border: '1px solid #ccc',
+            borderRadius: '6px'
+          }}>
+            <Spinner size={SpinnerSize.large} label={t.reloading || "Atualizando dados da biblioteca..."} />
+            <p style={{ marginTop: '10px' }}>Por favor, aguarde.</p>
+          </div>
+          {/* Renderiza o conteúdo subjacente para manter o tamanho */}
+          <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`}>
+            {/* Renderiza o botão desabilitado para o usuário não clicar novamente */}
+            <div style={{ padding: '5px 10px 10px 10px' }}>
+              <PrimaryButton
+                text={t.reloadContents}
+                disabled={true}
+                iconProps={{ iconName: 'Refresh' }}
+                styles={{ root: { width: '100%' } }}
+              />
+            </div>
+            <SplitterLayout percentage primaryIndex={1} secondaryInitialSize={20} primaryMinSize={40} secondaryMinSize={10}>
+              <div className={styles.treeView}></div>
+              <div className={styles.iframeContainer}></div>
+            </SplitterLayout>
+          </section>
+        </div>
+      );
+    }
+
 
     return (
       <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`}>
@@ -1062,21 +1126,13 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         >
           {/* Painel esquerdo: Árvore */}
           <div className={styles.treeView}>
-            {/* Overlay só sobre o menu durante o refresh forçado */}
-            {isRefreshing && (
-              <div className={styles.refreshOverlay}>
-                <Spinner size={SpinnerSize.large} label={t.reloading || "Atualizando dados da biblioteca..."} />
-                <p style={{ marginTop: '10px' }}>Por favor, aguarde.</p>
-              </div>
-            )}
-
-            {/* Botão de atualização */}
+            {/* Botão de atualização visível adicionado aqui */}
             {onForceRefresh && selectedLibraryUrl && (
               <div style={{ padding: '5px 10px 10px 10px' }}>
                 <PrimaryButton
                   onClick={this.handleForceRefresh}
-                  text={t.reloadContents}
-                  disabled={loading || isRefreshing}
+                  text={t.reloadContents || "Atualizar Dados"}
+                  disabled={loading}
                   iconProps={{ iconName: 'Refresh' }}
                   styles={{ root: { width: '100%' } }}
                 />
@@ -1084,7 +1140,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
             )}
 
             <div className={styles.treeContainer}>
-              {loading && treeData.length === 0 && !isRefreshing && <p>{t.loading}</p>}
+              {loading && treeData.length === 0 && <p>{t.loading}</p>}
               {error && <p style={{ color: 'red' }}>{error}</p>}
               {!loading && !error && treeData.length === 0 && (
                 <p>{(!this.props.metadataColumn1 && !this.props.metadataColumn2 && !this.props.metadataColumn3)
@@ -1092,7 +1148,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
                   : t.noDocuments}</p>
               )}
               {!error && treeData.length > 0 && renderTreeNodes(processedTreeData)}
-              {(loading && !isRefreshing) && treeData.length > 0 && (
+              {loading && treeData.length > 0 && (
                 <div className={styles.loadingIndicator} style={{ padding: '10px' }}>Carregando dados...</div>
               )}
             </div>
