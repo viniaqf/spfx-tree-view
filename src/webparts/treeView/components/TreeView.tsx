@@ -103,8 +103,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     try {
       const cfg = await TreeViewConfigService.loadByPage(pageUrl);
 
-      // ⬅️ NOVO: Se selectedLibraryUrl estiver faltando aqui, e há PublishedTreeData, 
-      // mas o Web Part está no ciclo de choque, não faça nada. O componentDidUpdate fará o trabalho.
       if (!this.props.selectedLibraryUrl) {
         console.log("URL de biblioteca faltando no componentDidMount. Aguardando choque de propriedades ser concluído.");
         // Se a Web Part está no estado 'nulo', não tente carregar nada ainda, apenas espere.
@@ -128,8 +126,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
   public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
 
-    // ⬅️ Condição 1: Estamos no meio de um refresh forçado (choque de propriedade)
-    // Se a Web Part acabou de restaurar a selectedLibraryUrl (de undefined para um valor real), reiniciamos.
     if (!prevProps.selectedLibraryUrl && this.props.selectedLibraryUrl) {
       console.log("Choque de propriedade detectado: Restaurando dados após URL ser restaurada.");
       sessionStorage.removeItem('treeViewCacheData');
@@ -499,7 +495,24 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           return;
         }
 
-        // --- 2) Lookup / User / ManagedMetadata (via metadataColumnTypes) ---
+        // --- 2) HARD-CODE: Area_x0020_Gestora como Lookup ---
+        if (baseInternalName === "Area_x0020_Gestora") {
+          const selects = [
+            "Area_x0020_Gestora/Id",
+            "Area_x0020_Gestora/Title"
+          ];
+          selects.forEach(s => {
+            if (!finalSelectColumns.includes(s)) {
+              finalSelectColumns.push(s);
+            }
+          });
+          if (!expandStatements.includes("Area_x0020_Gestora")) {
+            expandStatements.push("Area_x0020_Gestora");
+          }
+          return; // importantíssimo: não deixa cair nos casos genéricos
+        }
+
+        // --- 3) Lookup / User / ManagedMetadata (via metadataColumnTypes) ---
         if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
           const field = colMeta.lookupField || explicitFieldFromCol || "Title";
 
@@ -520,7 +533,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           return;
         }
 
-        // --- 3) MMD v1 (campo terminando com 0 ou _0) ---
+        // --- 4) MMD v1 (campo terminando com 0 ou _0) ---
         if ((baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/")) {
           const normalized = baseInternalName.endsWith("_0")
             ? baseInternalName.slice(0, -2)
@@ -535,7 +548,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           return;
         }
 
-        // --- 4) Coluna configurada como "Campo/Algo" diretamente no WebPart ---
+        // --- 5) Coluna configurada como "Campo/Algo" diretamente no WebPart ---
         if (col.includes("/")) {
           // ex: "Area_x0020_Gestora/Title"
           if (!finalSelectColumns.includes(col)) {
@@ -547,11 +560,12 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           return;
         }
 
-        // --- 5) Campo simples (Text, Number, Date, etc.) ---
+        // --- 6) Campo simples (Text, Number, Date, etc.) ---
         if (!finalSelectColumns.includes(baseInternalName)) {
           finalSelectColumns.push(baseInternalName);
         }
       });
+
 
       // Debug opcional
       console.log("FINAL $SELECT:", finalSelectColumns.join(", "));
