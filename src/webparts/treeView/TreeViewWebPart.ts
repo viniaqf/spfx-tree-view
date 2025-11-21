@@ -51,6 +51,9 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     [internalName: string]: { type: string; lookupField?: string };
   } = {};
 
+  private _originalLibraryUrl: string = "";
+  private _originalLibraryTitle: string | undefined = undefined;
+
   public render(): void {
     const element: React.ReactElement<ITreeViewProps> = React.createElement(
       TreeView,
@@ -68,6 +71,7 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
         metadataColumnTypes: this._columnTypesMap,
         customLibraryTitlePT: this.properties.customLibraryTitlePT, //SNO365-89
         customLibraryTitleES: this.properties.customLibraryTitleES, //SNO365-89
+        onForceRefresh: this.forceRefreshTreeData.bind(this),
       }
     );
 
@@ -247,7 +251,7 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
       this.properties.metadataColumn2 = "";
       this.properties.metadataColumn3 = "";
 
-      // ⚠️ Aguarde recarregar opções antes de renderizar e salvar
+      // Aguarde recarregar opções antes de renderizar e salvar
       await this.onPropertyPaneConfigurationStart();
 
       // Renderiza depois que as opções foram atualizadas
@@ -335,6 +339,66 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     return Version.parse("1.0");
   }
 
+  public async forceRefreshTreeData(): Promise<void> {
+    const pageUrl = TreeViewConfigService.getCurrentPageUrl();
+
+    try {
+      await TreeViewConfigService.clearPublishedData(pageUrl);
+    } catch (e) {
+      console.warn(
+        "Falha ao limpar cache persistente, prosseguindo com choque de propriedade:",
+        e
+      );
+    }
+
+    sessionStorage.removeItem("treeViewCacheData");
+
+    this._originalLibraryUrl = this.properties.selectedLibraryUrl || "";
+    this._originalLibraryTitle = this.properties.selectedLibraryTitle;
+
+    if (!this._originalLibraryUrl) {
+      this.render();
+      return;
+    }
+
+    // A. Zera a propriedade e força a renderização/salvamento (simula remoção)
+    this.properties.selectedLibraryUrl = undefined;
+    this.properties.selectedLibraryTitle = undefined;
+
+    // Força o salvamento da configuração mínima (sem a biblioteca)
+    await TreeViewConfigService.upsert({
+      PageURL: pageUrl,
+      Library: "", // Limpando a referência da biblioteca
+      Hierarchy: JSON.stringify(
+        [
+          this.properties.metadataColumn1,
+          this.properties.metadataColumn2,
+          this.properties.metadataColumn3,
+        ].filter(Boolean)
+      ),
+    });
+
+    this.render();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    this.properties.selectedLibraryUrl = this._originalLibraryUrl;
+    this.properties.selectedLibraryTitle = this._originalLibraryTitle;
+
+    await TreeViewConfigService.upsert({
+      PageURL: pageUrl,
+      Library: this._originalLibraryUrl,
+      Hierarchy: JSON.stringify(
+        [
+          this.properties.metadataColumn1,
+          this.properties.metadataColumn2,
+          this.properties.metadataColumn3,
+        ].filter(Boolean)
+      ),
+    });
+
+    this.render();
+  }
   private async handleRefreshClick(): Promise<void> {
     if (this._isRefreshing) {
       return;
@@ -346,10 +410,8 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     try {
       await this.onPropertyPaneConfigurationStart();
 
-      this.render();
-
       console.log(
-        "Web part forçada a recarregar. O cache será limpo e os dados buscados novamente."
+        "Metadados (colunas) recarregados no painel de propriedades."
       );
     } catch (error) {
       console.error("Falha ao recarregar os metadados:", error);

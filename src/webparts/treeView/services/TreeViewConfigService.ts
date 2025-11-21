@@ -37,7 +37,6 @@ export default class TreeViewConfigService {
     };
   }
 
-  // Upsert por PageURL.
   public static async upsert(rec: ITreeViewConfigRecord): Promise<void> {
     const existing = await this.loadByPage(rec.PageURL);
 
@@ -71,5 +70,30 @@ export default class TreeViewConfigService {
       Hierarchy: hierarchy,
       PublishedTreeData: jsonAllItems,
     });
+  }
+
+  /**
+   * Limpa o cache persistente (PublishedTreeData) do registro da página.
+   * Isso força o componente a buscar novos dados do SharePoint na próxima renderização.
+   */
+  public static async clearPublishedData(pageUrl: string): Promise<void> {
+    const existing = await this.loadByPage(pageUrl);
+
+    if (existing?.Id) {
+      await pnp.sp.web.lists
+        .getByTitle(this.listTitle)
+        .items.getById(existing.Id)
+        .update({
+          PublishedTreeData: null,
+        });
+      console.log(
+        `[TreeViewConfigService] Cache persistente (PublishedTreeData) limpo para a página: ${pageUrl}`
+      );
+    } else {
+      // Se não houver registro, não há o que limpar, mas podemos garantir que as configs mínimas existam.
+      console.log(
+        `[TreeViewConfigService] Nenhum registro encontrado para limpar o cache persistente: ${pageUrl}`
+      );
+    }
   }
 }

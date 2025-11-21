@@ -21,4 +21,5 @@ export interface ITreeViewProps {
   children?: ReactNode;
   customLibraryTitlePT?: string; //SNO365-89
   customLibraryTitleES?: string; //SNO365-89
+  onForceRefresh?: () => Promise<void>;
 }

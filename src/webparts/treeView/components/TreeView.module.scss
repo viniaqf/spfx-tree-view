@@ -16,6 +16,7 @@
   color: "[theme:bodyText, default: #323130]";
   color: var(--bodyText);
   font-family: $ms-font-family-fallbacks;
+  position: relative; // garantir que o overlay posicione relativo ao menu
 }
 
 // Caixa que contém a árvore
@@ -80,4 +81,17 @@
 
 .selectedNodeLabel {
   font-weight: 600;
+}
+
+.refreshOverlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(255, 255, 255, 0.9);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-radius: 6px;
+  border: 1px solid #ccc;
 }
