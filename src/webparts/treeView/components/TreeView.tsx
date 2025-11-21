@@ -428,9 +428,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       metadataColumn1,
       metadataColumn2,
       metadataColumn3,
-      metadataColumnTypes
+      metadataColumnTypes // Contém os tipos de coluna do SharePoint
     } = this.props;
 
+    // Se a URL da biblioteca for nula (durante o choque de propriedade), apenas retorna.
     if (!selectedLibraryUrl) {
       this.setState({ loading: false, isRefreshing: false, error: t.noLibrary });
       return;
@@ -450,6 +451,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         throw new Error(t.error_library_url_not_found);
       }
 
+      // Lógica existente para obter o ID da lista 'aplicacaoNormativo'
       if (metadataColumn1 === "aplicacaoNormativo" ||
         metadataColumn2 === "aplicacaoNormativo" ||
         metadataColumn3 === "aplicacaoNormativo") {
@@ -460,49 +462,59 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"];
       const expandStatements: string[] = [];
 
-      // Mapeamento para garantir que $select e $expand incluam todos os campos Lookup/User/ManagedMetadata
+      // Mapeamento dinâmico baseado no tipo de coluna (metadataColumnTypes)
       columnsToProcess.forEach(col => {
         if (!col) return;
 
         const baseInternalName = col.split("/")[0];
         const explicitFieldFromCol = col.includes("/") ? col.split("/")[1] : undefined;
 
-        let select = baseInternalName;
+        let select: string | undefined;
         let expand: string | undefined;
 
+        // 1. Caso 'aplicacaoNormativo' (MMD/Lookup customizado)
         if (baseInternalName === "aplicacaoNormativo") {
           select = `${baseInternalName}/Id,${baseInternalName}/DescTipoAplicacaoPT,${baseInternalName}/DescTipoAplicacaoES`;
           expand = baseInternalName;
         } else {
-          const colMeta = this.props.metadataColumnTypes?.[col] || this.props.metadataColumnTypes?.[baseInternalName];
+          // Tenta obter os metadados da coluna.
+          const colMeta = metadataColumnTypes?.[col] || metadataColumnTypes?.[baseInternalName];
 
+          // 2. Validação Genérica para Lookups, Usuários e MMD
           const isComplexField = colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata");
-          const needsExpansionFallback = baseInternalName.includes('_x0020_'); // Adicionado como fallback seguro para Area_x0020_Gestora
+          const isMMDV1 = (baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/");
 
-          if (isComplexField || needsExpansionFallback) {
-            const field = colMeta?.lookupField || explicitFieldFromCol || "Title";
-            // Garante que o campo de Lookup é selecionado corretamente
+          if (isComplexField) {
+            const field = colMeta.lookupField || explicitFieldFromCol || "Title";
+            // Para Lookups, MMD e User, SEMPRE selecione o ID e o campo de destino.
             select = `${baseInternalName}/Id,${baseInternalName}/${field}`;
             expand = baseInternalName;
-          } else if ((baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/")) {
-            // Lógica existente para Managed Metadata V1
+          } else if (isMMDV1) {
+            // Lógica para MMD V1 (ex: TaxKeyword0)
             const normalized = baseInternalName.endsWith("_0")
               ? baseInternalName.slice(0, -2)
               : baseInternalName.slice(0, -1);
             select = normalized;
             expand = normalized;
           } else if (col.includes("/")) {
-            // Lógica para campos expandidos já definidos na prop (ex: campo/propriedade)
+            // Lógica para campos que já foram configurados com a barra (ex: Link/Url)
             expand = baseInternalName;
             select = col;
+          } else {
+            // 3. Campos Simples (Text, Number, Date, etc.)
+            select = baseInternalName;
           }
         }
 
+        // Finalização da query
         if (select) {
-          // Verifica se o select já existe antes de adicionar
-          if (!finalSelectColumns.some(c => c.split(',').includes(select))) {
-            finalSelectColumns.push(select);
-          }
+          // Adiciona o campo ou os campos separados por vírgula ao select final
+          select.split(',').forEach(s => {
+            const trimmedS = s.trim();
+            if (trimmedS && !finalSelectColumns.includes(trimmedS)) {
+              finalSelectColumns.push(trimmedS);
+            }
+          });
         }
         if (expand && !expandStatements.includes(expand)) {
           expandStatements.push(expand);
@@ -510,8 +522,12 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       });
 
       // Filtra finalSelectColumns para remover duplicatas e entradas vazias
-      const uniqueFinalSelectColumns = Array.from(new Set(finalSelectColumns.filter(c => c && c.toLowerCase() !== 'undefined')));
+      const uniqueFinalSelectColumns = Array.from(new Set(finalSelectColumns.filter(c => c && c.toLowerCase() !== 'undefined' && !c.includes(','))));
       const uniqueExpandStatements = Array.from(new Set(expandStatements.filter(e => e && e.toLowerCase() !== 'undefined')));
+
+      // Debug: Log das queries finais
+      console.log("FINAL $SELECT:", uniqueFinalSelectColumns.join(','));
+      console.log("FINAL $EXPAND:", uniqueExpandStatements.join(','));
 
 
       const allItems = await pnp.sp.web.lists.getById(listInfo.Id).items
@@ -547,7 +563,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       }
 
     } catch (error) {
-      console.error("ERRO GRAVE NA BUSCA DE DADOS:", error); // Log do erro 400
+      console.error("ERRO GRAVE NA BUSCA DE DADOS:", error); // Log do erro
       this.setState({
         error: `${t.error_loading_data} ${escape((error as any).message || JSON.stringify(error))}`,
         loading: false,
