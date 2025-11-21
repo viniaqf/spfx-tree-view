@@ -422,6 +422,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
+
   private async loadTreeData(): Promise<void> {
     const {
       selectedLibraryUrl,
@@ -458,6 +459,14 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         await this.getAplicacaoNormativoListId(listInfo.Id);
       }
 
+
+      const KNOWN_COMPLEX_FIELDS = [
+        "Area_x0020_Gestora", // Campo problemático 1
+        "siglaDoTipoDoNormativo", // Campo problemático 2 (exige expansão no erro)
+        "aplicacaoNormativo" // Já tem tratamento especial, mas mantido aqui por redundância
+      ];
+
+
       const columnsToProcess = [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean);
       const finalSelectColumns = ["ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"];
       const expandStatements: string[] = [];
@@ -472,38 +481,44 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         let select: string | undefined;
         let expand: string | undefined;
 
-        // 1. Caso 'aplicacaoNormativo' (MMD/Lookup customizado)
-        if (baseInternalName === "aplicacaoNormativo") {
-          select = `${baseInternalName}/Id,${baseInternalName}/DescTipoAplicacaoPT,${baseInternalName}/DescTipoAplicacaoES`;
-          expand = baseInternalName;
-        } else {
-          // Tenta obter os metadados da coluna.
-          const colMeta = metadataColumnTypes?.[col] || metadataColumnTypes?.[baseInternalName];
+        // Tenta obter os metadados da coluna.
+        const colMeta = metadataColumnTypes?.[col] || metadataColumnTypes?.[baseInternalName];
 
-          // 2. Validação Genérica para Lookups, Usuários e MMD
-          const isComplexField = colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata");
-          const isMMDV1 = (baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/");
+        // 1. Definição da complexidade
+        const isKnownComplex = KNOWN_COMPLEX_FIELDS.includes(baseInternalName);
+        const isComplexFromMeta = colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata");
+        const isMMDV1 = (baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/");
 
-          if (isComplexField) {
-            const field = colMeta.lookupField || explicitFieldFromCol || "Title";
+        // Se for um campo complexo conhecido OU detectado pelos metadados
+        if (isKnownComplex || isComplexFromMeta) {
+          // 1.1. Tratamento específico para 'aplicacaoNormativo' (mantido por customizações de PT/ES)
+          if (baseInternalName === "aplicacaoNormativo") {
+            select = `${baseInternalName}/Id,${baseInternalName}/DescTipoAplicacaoPT,${baseInternalName}/DescTipoAplicacaoES`;
+            expand = baseInternalName;
+          } else {
+            // 1.2. Tratamento genérico para Lookups, MMD e User
+            const field = colMeta?.lookupField || explicitFieldFromCol || "Title";
             // Para Lookups, MMD e User, SEMPRE selecione o ID e o campo de destino.
             select = `${baseInternalName}/Id,${baseInternalName}/${field}`;
             expand = baseInternalName;
-          } else if (isMMDV1) {
-            // Lógica para MMD V1 (ex: TaxKeyword0)
-            const normalized = baseInternalName.endsWith("_0")
-              ? baseInternalName.slice(0, -2)
-              : baseInternalName.slice(0, -1);
-            select = normalized;
-            expand = normalized;
-          } else if (col.includes("/")) {
-            // Lógica para campos que já foram configurados com a barra (ex: Link/Url)
-            expand = baseInternalName;
-            select = col;
-          } else {
-            // 3. Campos Simples (Text, Number, Date, etc.)
-            select = baseInternalName;
           }
+        }
+        else if (isMMDV1) {
+          // 2. Lógica para MMD V1 (ex: TaxKeyword0)
+          const normalized = baseInternalName.endsWith("_0")
+            ? baseInternalName.slice(0, -2)
+            : baseInternalName.slice(0, -1);
+          select = normalized;
+          expand = normalized;
+        }
+        else if (col.includes("/")) {
+          // 3. Lógica para campos que já foram configurados com a barra (ex: Link/Url)
+          expand = baseInternalName;
+          select = col;
+        }
+        else {
+          // 4. Campos Simples (Text, Number, Date, etc.)
+          select = baseInternalName;
         }
 
         // Finalização da query
@@ -573,6 +588,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       });
     }
   }
+
+  // ... [restante da classe inalterado]
 
   /**
    * Obtém o ID da lista referenciada pela coluna "aplicacaoNormativo".
