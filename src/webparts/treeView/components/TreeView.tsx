@@ -442,53 +442,33 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
-
   private async loadTreeData(): Promise<void> {
-    const {
-      selectedLibraryUrl: propSelectedLibraryUrl,
-      metadataColumn1: propMetadataColumn1,
-      metadataColumn2: propMetadataColumn2,
-      metadataColumn3: propMetadataColumn3,
-      metadataColumnTypes: propMetadataColumnTypes
-    } = this.props;
 
-    // Se estamos em refresh e temos snapshot, usamos o snapshot.
-    // Isso evita pegar valores nulos/undefined no meio do choque de propriedades.
     const useSnapshot = this.state.isRefreshing && this._refreshSnapshot;
 
-    const selectedLibraryUrl = useSnapshot && this._refreshSnapshot!.selectedLibraryUrl
-      ? this._refreshSnapshot!.selectedLibraryUrl
-      : propSelectedLibraryUrl;
-
-    const metadataColumn1 = useSnapshot && this._refreshSnapshot!.metadataColumn1 !== undefined
-      ? this._refreshSnapshot!.metadataColumn1
-      : propMetadataColumn1;
-
-    const metadataColumn2 = useSnapshot && this._refreshSnapshot!.metadataColumn2 !== undefined
-      ? this._refreshSnapshot!.metadataColumn2
-      : propMetadataColumn2;
-
-    const metadataColumn3 = useSnapshot && this._refreshSnapshot!.metadataColumn3 !== undefined
-      ? this._refreshSnapshot!.metadataColumn3
-      : propMetadataColumn3;
-
-    const metadataColumnTypes = useSnapshot && this._refreshSnapshot!.metadataColumnTypes
-      ? this._refreshSnapshot!.metadataColumnTypes
-      : propMetadataColumnTypes;
+    const config = {
+      selectedLibraryUrl: useSnapshot ? this._refreshSnapshot!.selectedLibraryUrl : this.props.selectedLibraryUrl,
+      metadataColumn1: useSnapshot ? this._refreshSnapshot!.metadataColumn1 : this.props.metadataColumn1,
+      metadataColumn2: useSnapshot ? this._refreshSnapshot!.metadataColumn2 : this.props.metadataColumn2,
+      metadataColumn3: useSnapshot ? this._refreshSnapshot!.metadataColumn3 : this.props.metadataColumn3,
+      metadataColumnTypes: useSnapshot ? this._refreshSnapshot!.metadataColumnTypes : this.props.metadataColumnTypes
+    };
 
     // Sem URL de biblioteca: nada pra carregar
-    if (!selectedLibraryUrl) {
+    if (!config.selectedLibraryUrl) {
       this.setState({ loading: false, isRefreshing: false, error: t.noLibrary });
       return;
     }
 
     // Limpa eventual erro de "sem biblioteca" e começa loading
-    const currentError = this.state.error === t.noLibrary ? "" : this.state.error;
-    this.setState({ loading: true, error: currentError });
+    this.setState({
+      loading: true,
+      error: this.state.error === t.noLibrary ? "" : this.state.error
+    });
 
     try {
       const listInfo = (await pnp.sp.web.lists
-        .filter(`RootFolder/ServerRelativeUrl eq '${selectedLibraryUrl}'`)
+        .filter(`RootFolder/ServerRelativeUrl eq '${config.selectedLibraryUrl}'`)
         .select("Id")
         .get())[0];
 
@@ -496,130 +476,80 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         throw new Error(t.error_library_url_not_found);
       }
 
-      // Caso especial: aplicacaoNormativo
-      if (
-        metadataColumn1 === "aplicacaoNormativo" ||
-        metadataColumn2 === "aplicacaoNormativo" ||
-        metadataColumn3 === "aplicacaoNormativo"
-      ) {
+      const colsToCheck = [config.metadataColumn1, config.metadataColumn2, config.metadataColumn3];
+      if (colsToCheck.includes("aplicacaoNormativo")) {
         await this.getAplicacaoNormativoListId(listInfo.Id);
       }
 
-      const columnsToProcess = [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean);
-      const finalSelectColumns: string[] = [
-        "ID",
-        "FileRef",
-        "FileLeafRef",
-        "ContentTypeId",
-        "FSObjType"
-      ];
-      const expandStatements: string[] = [];
+      const columnsToProcess = colsToCheck.filter(Boolean) as string[];
+
+      const selectSet = new Set<string>([
+        "ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"
+      ]);
+      const expandSet = new Set<string>();
 
       columnsToProcess.forEach(col => {
-        if (!col) return;
-
-        const baseInternalName = col.split("/")[0];               // ex: Area_x0020_Gestora
-        const explicitFieldFromCol = col.includes("/")            // ex: "Title" em "Area_x0020_Gestora/Title"
+        const baseInternalName = col.split("/")[0];
+        const explicitFieldFromCol = col.includes("/")
           ? col.split("/")[1]
           : undefined;
 
-        const colMeta = metadataColumnTypes?.[col] || metadataColumnTypes?.[baseInternalName];
+        const colMeta = config.metadataColumnTypes?.[col] || config.metadataColumnTypes?.[baseInternalName];
 
-        // --- 1) Campo especial: aplicacaoNormativo (PT/ES) ---
         if (baseInternalName === "aplicacaoNormativo") {
-          const selects = [
-            "aplicacaoNormativo/Id",
-            "aplicacaoNormativo/DescTipoAplicacaoPT",
-            "aplicacaoNormativo/DescTipoAplicacaoES"
-          ];
-          selects.forEach(s => {
-            if (!finalSelectColumns.includes(s)) {
-              finalSelectColumns.push(s);
-            }
-          });
-          if (!expandStatements.includes("aplicacaoNormativo")) {
-            expandStatements.push("aplicacaoNormativo");
-          }
+          selectSet.add("aplicacaoNormativo/Id");
+          selectSet.add("aplicacaoNormativo/DescTipoAplicacaoPT");
+          selectSet.add("aplicacaoNormativo/DescTipoAplicacaoES");
+          expandSet.add("aplicacaoNormativo");
           return;
         }
 
-        /// --- 2) HARD-CODE: Area_x0020_Gestora como Lookup ---
         if (baseInternalName === "Area_x0020_Gestora") {
-          // Garante que o campo base para EXPAND seja adicionado
-          if (!expandStatements.includes("Area_x0020_Gestora")) {
-            expandStatements.push("Area_x0020_Gestora");
-          }
-          // Garante que os campos de destino para SELECT sejam adicionados
-          const selects = [
-            "Area_x0020_Gestora/Id",
-            "Area_x0020_Gestora/Title"
-          ];
-          selects.forEach(s => {
-            if (!finalSelectColumns.includes(s)) {
-              finalSelectColumns.push(s);
-            }
-          });
-          return; // Importante para não cair na lógica genérica
+          selectSet.add("Area_x0020_Gestora/Id");
+          selectSet.add("Area_x0020_Gestora/Title");
+          expandSet.add("Area_x0020_Gestora");
+          return;
         }
 
-        // --- 3) Lookup / User / ManagedMetadata (via metadataColumnTypes) ---
+        if (baseInternalName === "siglaDoTipoDoNormativo") {
+          selectSet.add("siglaDoTipoDoNormativo/Id");
+          selectSet.add("siglaDoTipoDoNormativo/Title");
+          selectSet.add("siglaDoTipoDoNormativo/Sigla");
+          expandSet.add("siglaDoTipoDoNormativo");
+          return;
+        }
+
         if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
           const field = colMeta.lookupField || explicitFieldFromCol || "Title";
 
-          const selects = [
-            `${baseInternalName}/Id`,
-            `${baseInternalName}/${field}`
-          ];
-
-          selects.forEach(s => {
-            if (!finalSelectColumns.includes(s)) {
-              finalSelectColumns.push(s);
-            }
-          });
-
-          if (!expandStatements.includes(baseInternalName)) {
-            expandStatements.push(baseInternalName);
-          }
+          selectSet.add(`${baseInternalName}/Id`);
+          selectSet.add(`${baseInternalName}/${field}`);
+          expandSet.add(baseInternalName);
           return;
         }
 
-        // --- 4) MMD v1 (campo terminando com 0 ou _0) ---
         if ((baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/")) {
           const normalized = baseInternalName.endsWith("_0")
             ? baseInternalName.slice(0, -2)
             : baseInternalName.slice(0, -1);
 
-          if (!finalSelectColumns.includes(normalized)) {
-            finalSelectColumns.push(normalized);
-          }
-          if (!expandStatements.includes(normalized)) {
-            expandStatements.push(normalized);
-          }
+          selectSet.add(normalized);
+          expandSet.add(normalized);
           return;
         }
 
-        /// --- 5) Coluna configurada como "Campo/Algo" diretamente no WebPart ---
         if (col.includes("/")) {
-          const [base, prop] = col.split("/");
-          // Verifica se a propriedade que você quer já está em SELECT
-          if (!finalSelectColumns.includes(col)) {
-            finalSelectColumns.push(col);
-          }
-          // E garante que o campo base está no EXPAND
-          if (!expandStatements.includes(base)) {
-            expandStatements.push(base);
-          }
+          selectSet.add(col);
+          expandSet.add(baseInternalName);
           return;
         }
 
-        // --- 6) Campo simples (Text, Number, Date, etc.) ---
-        if (!finalSelectColumns.includes(baseInternalName)) {
-          finalSelectColumns.push(baseInternalName);
-        }
+        selectSet.add(baseInternalName);
       });
 
+      const finalSelectColumns = Array.from(selectSet);
+      const expandStatements = Array.from(expandSet);
 
-      // Debug opcional
       console.log("FINAL $SELECT:", finalSelectColumns.join(", "));
       console.log("FINAL $EXPAND:", expandStatements.join(", "));
 
@@ -628,7 +558,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         .expand(...expandStatements)
         .getAll();
 
-      // Salva os dados e as colunas usadas no cache
       sessionStorage.setItem('treeViewCacheData', JSON.stringify({
         items: allItems,
         columns: columnsToProcess
@@ -639,15 +568,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
       try {
         const pageUrl = TreeViewConfigService.getCurrentPageUrl();
-        const hierarchy = JSON.stringify(
-          [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean)
-        );
-        const library = selectedLibraryUrl || "";
-
+        const hierarchy = JSON.stringify(columnsToProcess);
         await TreeViewConfigService.upsertPublishedData(
           pageUrl,
           JSON.stringify(allItems),
-          library,
+          config.selectedLibraryUrl || "",
           hierarchy
         );
       } catch (e) {
