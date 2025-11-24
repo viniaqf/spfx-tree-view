@@ -443,7 +443,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   private async loadTreeData(): Promise<void> {
-
+    // 1. Simplificação da escolha entre Props Atuais vs Snapshot (Refresh)
     const useSnapshot = this.state.isRefreshing && this._refreshSnapshot;
 
     const config = {
@@ -476,26 +476,30 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         throw new Error(t.error_library_url_not_found);
       }
 
+      // Verifica se precisa buscar ID da lista de Normativos
       const colsToCheck = [config.metadataColumn1, config.metadataColumn2, config.metadataColumn3];
       if (colsToCheck.includes("aplicacaoNormativo")) {
         await this.getAplicacaoNormativoListId(listInfo.Id);
       }
 
+      // 2. Uso de SET para evitar duplicatas e simplificar a lógica
       const columnsToProcess = colsToCheck.filter(Boolean) as string[];
 
+      // Campos padrão obrigatórios
       const selectSet = new Set<string>([
         "ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"
       ]);
       const expandSet = new Set<string>();
 
       columnsToProcess.forEach(col => {
-        const baseInternalName = col.split("/")[0];
-        const explicitFieldFromCol = col.includes("/")
+        const baseInternalName = col.split("/")[0];    // ex: Area_x0020_Gestora
+        const explicitFieldFromCol = col.includes("/") // ex: "Title" em "Area_x0020_Gestora/Title"
           ? col.split("/")[1]
           : undefined;
 
         const colMeta = config.metadataColumnTypes?.[col] || config.metadataColumnTypes?.[baseInternalName];
 
+        // --- CASO 1: aplicacaoNormativo (PT/ES) ---
         if (baseInternalName === "aplicacaoNormativo") {
           selectSet.add("aplicacaoNormativo/Id");
           selectSet.add("aplicacaoNormativo/DescTipoAplicacaoPT");
@@ -504,6 +508,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           return;
         }
 
+        // --- CASO 2: Area_x0020_Gestora (CORREÇÃO DO ERRO 400) ---
+        // Forçamos a leitura de ID e Title. Se colMeta falhar, isso garante que a query funcione.
         if (baseInternalName === "Area_x0020_Gestora") {
           selectSet.add("Area_x0020_Gestora/Id");
           selectSet.add("Area_x0020_Gestora/Title");
@@ -511,14 +517,17 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           return;
         }
 
+        // --- CASO 3: siglaDoTipoDoNormativo (CORREÇÃO DE LOGICA) ---
+        // Agora está fora do bloco da Area_x0020_Gestora
         if (baseInternalName === "siglaDoTipoDoNormativo") {
           selectSet.add("siglaDoTipoDoNormativo/Id");
           selectSet.add("siglaDoTipoDoNormativo/Title");
-          selectSet.add("siglaDoTipoDoNormativo/Sigla");
+          selectSet.add("siglaDoTipoDoNormativo/Sigla"); // Assumindo que 'Sigla' é a coluna interna
           expandSet.add("siglaDoTipoDoNormativo");
           return;
         }
 
+        // --- CASO 4: Lookup / User / ManagedMetadata genérico ---
         if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
           const field = colMeta.lookupField || explicitFieldFromCol || "Title";
 
@@ -528,6 +537,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           return;
         }
 
+        // --- CASO 5: MMD v1 (campo terminando com 0 ou _0) ---
         if ((baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/")) {
           const normalized = baseInternalName.endsWith("_0")
             ? baseInternalName.slice(0, -2)
@@ -538,20 +548,24 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           return;
         }
 
+        // --- CASO 6: Coluna configurada com subpropriedade "/" ---
         if (col.includes("/")) {
-          selectSet.add(col);
-          expandSet.add(baseInternalName);
+          selectSet.add(col); // Adiciona o campo composto inteiro
+          expandSet.add(baseInternalName); // Garante expand na base
           return;
         }
 
+        // --- CASO 7: Default (Campo simples - Texto/Numero/Data) ---
         selectSet.add(baseInternalName);
       });
 
+      // Converte os Sets de volta para Arrays
       const finalSelectColumns = Array.from(selectSet);
       const expandStatements = Array.from(expandSet);
 
-      console.log("FINAL $SELECT:", finalSelectColumns.join(", "));
-      console.log("FINAL $EXPAND:", expandStatements.join(", "));
+      // Debug para verificar no console do navegador
+      console.log("DEBUG FINAL $SELECT:", finalSelectColumns.join(", "));
+      console.log("DEBUG FINAL $EXPAND:", expandStatements.join(", "));
 
       const allItems = await pnp.sp.web.lists.getById(listInfo.Id).items
         .select(...finalSelectColumns)
