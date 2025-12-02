@@ -25,6 +25,8 @@ import { getTranslations } from "../../utils/getTranslations";
 import { PropertyPaneAsyncButton } from "./components/PropertyPaneAsyncButton";
 
 export interface ITreeViewWebPartProps {
+  viewIdPT: string;
+  viewIdES: string;
   description: string;
   selectedLibraryUrl?: string;
   selectedLibraryTitle?: string;
@@ -36,6 +38,8 @@ export interface ITreeViewWebPartProps {
   };
   customLibraryTitlePT?: string;
   customLibraryTitleES?: string;
+  viewNamePT: string;
+  viewNameES: string;
 }
 
 const t = getTranslations();
@@ -53,6 +57,45 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
 
   private _originalLibraryUrl: string = "";
   private _originalLibraryTitle: string | undefined = undefined;
+  private _viewOptions: IPropertyPaneDropdownOption[] = [];
+
+  private async loadViews(serverRelativeUrl: string): Promise<void> {
+    if (!serverRelativeUrl) {
+      this._viewOptions = [];
+      return;
+    }
+
+    try {
+      const listCandidates = await pnp.sp.web.lists
+        .filter(`RootFolder/ServerRelativeUrl eq '${serverRelativeUrl}'`)
+        .select("Id")
+        .get();
+
+      if (!listCandidates || listCandidates.length === 0) {
+        console.warn("Lista não encontrada para a URL:", serverRelativeUrl);
+        this._viewOptions = [];
+        return;
+      }
+
+      const listId = listCandidates[0].Id;
+      const views = await pnp.sp.web.lists.getById(listId).views
+        .select("Id", "Title")
+        .get();
+
+      this._viewOptions = views.map((view) => ({
+        key: view.Id,
+        text: view.Title
+      }));
+
+      this._viewOptions.unshift({ key: "", text: "Selecione uma View..." });
+
+    } catch (error) {
+      console.error("Erro ao carregar views:", error);
+      this._viewOptions = [];
+    }
+
+    this.context.propertyPane.refresh();
+  }
 
   public render(): void {
     const element: React.ReactElement<ITreeViewProps> = React.createElement(
@@ -71,6 +114,8 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
         metadataColumnTypes: this._columnTypesMap,
         customLibraryTitlePT: this.properties.customLibraryTitlePT, //SNO365-89
         customLibraryTitleES: this.properties.customLibraryTitleES, //SNO365-89
+        viewIdPT: this.properties.viewIdPT,
+        viewIdES: this.properties.viewIdES,
         onForceRefresh: this.forceRefreshTreeData.bind(this),
       }
     );
@@ -226,6 +271,10 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
     }
 
     this.context.propertyPane.refresh();
+
+    if (this.properties.selectedLibraryUrl) {
+      await this.loadViews(this.properties.selectedLibraryUrl);
+    }
   }
 
   protected async onPropertyPaneFieldChanged(
@@ -250,7 +299,10 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
       this.properties.metadataColumn1 = "";
       this.properties.metadataColumn2 = "";
       this.properties.metadataColumn3 = "";
+      this.properties.viewIdPT = ""; 
+      this.properties.viewIdES = "";
 
+      await this.loadViews(newValue);
       // Aguarde recarregar opções antes de renderizar e salvar
       await this.onPropertyPaneConfigurationStart();
 
@@ -285,7 +337,9 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
       propertyPath === "metadataColumn1" ||
       propertyPath === "metadataColumn2" ||
       propertyPath === "metadataColumn3" ||
-      propertyPath === "description"
+      propertyPath === "description" ||
+      propertyPath === "viewNamePT" ||
+      propertyPath === "viewNameES"
     ) {
       this.render();
       try {
@@ -490,6 +544,19 @@ export default class TreeViewWebPart extends BaseClientSideWebPart<ITreeViewWebP
                   isLoading: this._isRefreshing,
                   onClick: this.handleRefreshClick.bind(this),
                   disabled: !this.properties.selectedLibraryUrl,
+                }),
+                PropertyPaneDropdown("viewIdPT", {
+                  label: "View Padrão (Português)",
+                  options: this._viewOptions,
+                  disabled: !this.properties.selectedLibraryUrl || this._viewOptions.length === 0,
+                  selectedKey: this.properties.viewIdPT
+                }),
+
+                PropertyPaneDropdown("viewIdES", {
+                  label: "View Padrão (Espanhol)",
+                  options: this._viewOptions,
+                  disabled: !this.properties.selectedLibraryUrl || this._viewOptions.length === 0,
+                  selectedKey: this.properties.viewIdES
                 }),
               ],
             },

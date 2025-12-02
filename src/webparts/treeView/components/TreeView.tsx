@@ -73,7 +73,41 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
   }
 
-  // Verifica se a URL existe (retorna true se status 200-299)
+  private async resolveViewUrl(): Promise<string> {
+    const { selectedLibraryUrl, viewIdPT, viewIdES } = this.props;
+    const lang = (getUserLanguage() || "pt").toLowerCase();
+
+    const targetViewId = lang.startsWith("es") ? viewIdES : viewIdPT;
+
+    if (!targetViewId) {
+      return selectedLibraryUrl || "";
+    }
+
+    try {
+      const listCandidates = await pnp.sp.web.lists
+        .filter(`RootFolder/ServerRelativeUrl eq '${selectedLibraryUrl}'`)
+        .select("Id")
+        .get();
+
+      if (listCandidates && listCandidates.length > 0) {
+        const listId = listCandidates[0].Id;
+
+        const viewInfo = await pnp.sp.web.lists.getById(listId).views
+          .getById(targetViewId)
+          .select("ServerRelativeUrl")
+          .get();
+
+        if (viewInfo?.ServerRelativeUrl) {
+          return viewInfo.ServerRelativeUrl;
+        }
+      }
+    } catch (error) {
+      console.warn(`Erro ao resolver URL da View para o ID ${targetViewId}`, error);
+    }
+
+    return selectedLibraryUrl || "";
+  }
+
   private async checkUrlExists(url: string): Promise<boolean> {
     try {
       const res = await fetch(url, { method: "HEAD" });
@@ -85,27 +119,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
 
   private async getDefaultLibraryViewUrl(): Promise<string> {
-    const webUrl = this.props.context.pageContext.web.absoluteUrl;
-    const libUrl = this.props.selectedLibraryUrl || "";
-    if (!libUrl) return "";
-
-    const libAbs = new URL(libUrl, webUrl); // https://<tenant>/sites/.../Normativos
-    const libNoTrail = libAbs.href.replace(/\/$/, "");
-
-    // Define página conforme idioma
-    const lang = (getUserLanguage() || "pt").toLowerCase();
-    const viewPage = lang.startsWith("es") ? "ES.aspx" : "PT.aspx";
-    const candidateUrl = `${libNoTrail}/Forms/${viewPage}`;
-
-    // Verifica se a view existe
-    const exists = await this.checkUrlExists(candidateUrl);
-
-    if (exists) {
-      return candidateUrl;
-    }
-
-    // Fallback para raiz da biblioteca (sem .aspx)
-    return libNoTrail;
+    return this.resolveViewUrl();
   }
 
   public async componentDidMount(): Promise<void> {
@@ -827,17 +841,14 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   private async buildIframeUrl(node: ITreeNode): Promise<string> {
-    const webUrl = this.props.context.pageContext.web.absoluteUrl;
-    const libUrl = this.props.selectedLibraryUrl || "";
-    if (!libUrl) return "";
+    const { selectedLibraryUrl } = this.props;
+    if (!selectedLibraryUrl) return "";
 
-    const libAbs = new URL(libUrl, webUrl);
-    const libNoTrail = libAbs.href.replace(/\/$/, "");
+    let baseViewUrl = await this.resolveViewUrl();
 
-    // 1. Constrói a URL com a view padrão e os filtros
-    const lang = (getUserLanguage() || "pt").toLowerCase();
-    const viewPage = lang.startsWith("es") ? "ES.aspx" : "PT.aspx";
-    const baseViewWithAspx = `${libNoTrail}/Forms/${viewPage}`;
+    if (!baseViewUrl) baseViewUrl = selectedLibraryUrl;
+
+    const urlClean = baseViewUrl.replace(/\/$/, "");
 
     const nodePath = this.findNodePath(this.state.treeData, node.key);
     const filterParams: string[] = [];
@@ -851,14 +862,14 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           let filterValue = currentPathNode.columnValue;
 
           if (currentPathNode.columnInternalName === "aplicacaoNormativo") {
-            const aplicacaoNormativoId = this.state.allDocumentsCache
-              .find(doc => this.getFieldValue(doc, currentPathNode.columnInternalName) === currentPathNode.columnValue)
-              ?.aplicacaoNormativo?.Id;
+            const docMatch = this.state.allDocumentsCache
+              .find(doc => this.getFieldValue(doc, currentPathNode.columnInternalName) === currentPathNode.columnValue);
 
-            if (aplicacaoNormativoId) {
-              filterValue = aplicacaoNormativoId;
-            }
+            const val = docMatch ? docMatch["aplicacaoNormativo"] : null;
+            if (val && val.Id) filterValue = val.Id;
+            else if (val && val.ID) filterValue = val.ID;
           }
+
           filterParams.push(
             `FilterField${filterCount}=${encodeURIComponent(filterField)}`,
             `FilterValue${filterCount}=${encodeURIComponent(filterValue)}`,
@@ -870,20 +881,17 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
 
     const filtersQuery = filterParams.length > 0 ? `?${filterParams.join("&")}` : "";
-    const candidateUrl = `${baseViewWithAspx}${filtersQuery}`;
 
-    // 2. Verifica se a URL com a view e os filtros existe.
-    const exists = await this.checkUrlExists(candidateUrl);
+    const separator = urlClean.includes("?") ? "&" : "?";
 
-    if (exists) {
-      console.log("URL do Iframe com filtros concatenados:", candidateUrl);
-      return candidateUrl;
-    } else {
-      // 3. Fallback: se a URL com a view for 404, retorna a URL da biblioteca.
-      const fallbackUrl = libNoTrail;
-      console.log("URL com .aspx retornou 404. Usando fallback:", fallbackUrl);
-      return fallbackUrl;
-    }
+    const finalQuery = filtersQuery.startsWith("?") ? filtersQuery.substring(1) : filtersQuery;
+
+    const fullUrl = filterParams.length > 0
+      ? `${urlClean}${separator}${finalQuery}`
+      : urlClean;
+
+    console.log("URL Final gerada para o Iframe:", fullUrl);
+    return fullUrl;
   }
 
   // Método auxiliar para encontrar a trilha raiz dos nós da hierarquia, fundamental para fazer a URL do iframe retornar os filtros concatenados.
