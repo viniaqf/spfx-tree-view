@@ -2,7 +2,7 @@
   "@microsoft/generator-sharepoint": {
     "plusBeta": false,
     "isCreatingSolution": true,
-    "version": "1.15.0",
+    "version": "1.15.5",
     "libraryName": "tree-view",
     "libraryId": "0c0ed5f1-dec6-4b06-8e68-433419c6dcc1",
     "environment": "spo",

@@ -32,7 +32,9 @@
       },
       "officeFabricIconFontName": "Page",
       "properties": {
-        "description": "tree-view"
+        "description": "tree-view",
+        "viewNamePT": "PT.aspx",
+        "viewNameES": "ES.aspx"
       }
     }
   ]

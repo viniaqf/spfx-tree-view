@@ -26,5 +26,7 @@
   "libraryNameES": "Nombre de la biblioteca en ES",
   "libraryNamePTDescription": "Si se define, este nombre se mostrará en lugar del título original de la biblioteca en portugués.",
   "originalLibraryTitle": "Título original de la biblioteca.",
-  "libraryNameESDescription": "Si se define, este nombre se mostrará en lugar del título original de la biblioteca en español."
+  "libraryNameESDescription": "Si se define, este nombre se mostrará en lugar del título original de la biblioteca en español.",
+  "reloading": "Recargando...",
+  "reloadContents": "Actualizar menú"
 }
