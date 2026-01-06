@@ -664,15 +664,44 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     if (!col) return [];
     const colStr: string = String(col);
 
+    //remove chars invisíveis comuns
+    const clean = (s: string) =>
+      s.replace(/[\u200E\u200F\u202A-\u202E\u00A0]/g, "").trim();
+
     const unique = new Set<string>();
     docs.forEach(doc => {
       const val = this.getFieldValue(doc, col);
-      if (val) unique.add(String(val));
+      if (val) unique.add(clean(String(val)));
     });
 
-    return Array.from(unique).sort().map(value => ({
-      key: `${colStr}-${value}-${currentLevel}-${this.buildFilterQueryForItems([...currentFilters, { column: colStr, value }])}`,
-      label: this.getLabelWithOptionalId(colStr, value, docs),
+    const items = Array.from(unique).map(value => {
+      const label = this.getLabelWithOptionalId(colStr, value, docs);
+
+      let sortKeyNum: number | null = null;
+      if (colStr === "aplicacaoNormativo") {
+        const id = this.getIdForColumnValue(colStr, value, docs);
+        if (id) {
+          const n = parseInt(id, 10);
+          if (!isNaN(n)) sortKeyNum = n;
+        }
+      }
+
+      return { value, label, sortKeyNum };
+    });
+
+    items.sort((a, b) => {
+
+      if (a.sortKeyNum !== null && b.sortKeyNum !== null) return a.sortKeyNum - b.sortKeyNum;
+
+      if (a.sortKeyNum !== null) return -1;
+      if (b.sortKeyNum !== null) return 1;
+
+      return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" });
+    });
+
+    return items.map(({ value, label }) => ({
+      key: `${colStr}-${currentLevel}-${value}`,
+      label,
       icon: "Tag",
       isFolder: true,
       level: currentLevel,
@@ -683,8 +712,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       isClicked: false,
       filterQuery: this.buildFilterQueryForItems([...currentFilters, { column: colStr, value }])
     }));
-
   };
+
 
   private getFieldValue = (item: any, name: string): any => {
     if (!item || !name) return "";
