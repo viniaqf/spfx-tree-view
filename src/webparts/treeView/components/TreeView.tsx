@@ -816,19 +816,57 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
   private async handleNodeClick(node: ITreeNode): Promise<void> {
 
+    // Se não for pasta (arquivo final), abre nova aba
     if (!node.isFolder) {
       if (node.url) window.open(node.url, '_blank');
       return;
     }
 
+    // Nível 0 (Raiz da biblioteca) - Limpa o iframe
     if (node.level === 0) {
       this.setState({ iframeUrl: "", selectedKey: null });
       return;
     }
 
-    if (node.level === 1) {
-      const iframeUrl = await this.buildIframeUrl(node);
-      this.setState({ iframeUrl, selectedKey: node.key });
+    if (node.level === 2) {
+
+
+      const origin = window.location.origin;
+
+      // 1. Resolve a URL da View (PT.aspx ou ES.aspx) usando a função existente
+      // Se não achar view específica, usa a raiz da biblioteca
+      let relativeViewUrl = await this.resolveViewUrl();
+      if (!relativeViewUrl) {
+        relativeViewUrl = this.props.selectedLibraryUrl || "";
+      }
+
+      // Remove query strings antigas para limpar a URL base
+      const urlClean = relativeViewUrl.split('?')[0];
+      const fullBaseUrl = `${origin}${urlClean}`;
+
+
+      const categoryValue = node.columnValue || "";
+      const fieldName = node.columnInternalName || "siglaDoTipoDoNormativo";
+
+      const queryParams = [
+        `FilterField1=${encodeURIComponent(fieldName)}`,
+        `FilterValue1=${encodeURIComponent(categoryValue)}`,
+        `FilterType1=Lookup`,
+        `FilterDisplay1=${encodeURIComponent(categoryValue)}`,
+
+        `FilterField2=aplicacaoNormativo%5Fx003A%5FDescri%5Fx00e7%5F%5Fx00e3%5Fo%5Fx0020%5Fdo%5Fx0020%5FTipo%5Fx0020%5Fde%5Fx0020%5FAplicacao%5Fx0020%5F%5Fx0028%5FPT%5Fx0029%5F`,
+        `FilterValue2=`,
+        `FilterType2=Lookup`,
+        `FilterDisplay2=`,
+
+        `viewid=07e1628c-f78c-4f26-b17a-14ba78c379f3`
+      ];
+
+      const customIframeUrl = `${fullBaseUrl}?${queryParams.join('&')}`;
+
+      console.log("URL Customizada Nível 1:", customIframeUrl);
+
+      this.setState({ iframeUrl: customIframeUrl, selectedKey: node.key });
       return;
     }
 
