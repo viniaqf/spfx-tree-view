@@ -414,7 +414,13 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
           const filters = updated.filterQuery?.split(" and ").map(f => {
             const [col, val] = f.split(" eq ");
-            return { column: col, value: val.replace(/'/g, "") };
+            if (val === undefined || val === null) {
+              this.setState({
+                error: "O metadado selecionado para compor o menu ainda não possui nenhum valor. É necessário que o metadado selecionado possua valor em algum documento.",
+                loading: false // SNO365-133
+              });
+            }
+            return { column: col, value: (val || "").replace(/'/g, "") };
           }) ?? [];
 
           const scopedDocs = this.state.allDocumentsCache.filter(doc =>
@@ -795,7 +801,13 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
         const filters = updated.filterQuery?.split(" and ").map(f => {
           const [col, val] = f.split(" eq ");
-          return { column: col, value: val.replace(/'/g, "") };
+          if (val === undefined || val === null) {
+            this.setState({
+              error: "O metadado selecionado para compor o menu ainda não possui nenhum valor. É necessário que o metadado selecionado possua valor em algum documento.",
+              loading: false // SNO365-133
+            });
+          }
+          return { column: col, value: (val || "").replace(/'/g, "") };
         }) ?? [];
 
         const scopedDocs = this.state.allDocumentsCache.filter(doc =>
@@ -848,7 +860,15 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     if (!baseViewUrl) baseViewUrl = selectedLibraryUrl;
 
-    const urlClean = baseViewUrl.replace(/\/$/, "");
+    const urlClean = (baseViewUrl || "").replace(/\/$/, "");
+
+    if (!urlClean) {
+      this.setState({
+        error: "A URL da biblioteca ou View não pôde ser identificada corretamente.",
+        loading: false
+      });
+      return ""; //SNO365-133
+    }
 
     const nodePath = this.findNodePath(this.state.treeData, node.key);
     const filterParams: string[] = [];
