@@ -34,5 +34,21 @@ button[data-automationid="clearFiltersPill"] {
   display: none !important;
 }
 
+div[data-automationid^="addColumnLollipop"] {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+[class^="resizeDivider"],
+[class*=" resizeDivider"] {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+[class^="headerCell"],
+[class*=" headerCell"] {
+  cursor: default !important;
+  resize: none !important;
+}
 
 `;
