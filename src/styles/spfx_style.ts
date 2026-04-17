@@ -51,22 +51,25 @@ div[data-automationid^="addColumnLollipop"] {
   resize: none !important;
 }
 
-.layout-pane.layout-pane-primary {
+.splitter-layout .layout-pane.layout-pane-primary {
   overflow: hidden !important;
-  display: flex;
-  flex-direction: column;
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
-.iframeContainer_b3e2de1e {
+.splitter-layout .layout-pane.layout-pane-primary .iframeContainer_b3e2de1e {
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
-.iframeContainer_b3e2de1e > div {
+.splitter-layout .layout-pane.layout-pane-primary .iframeContainer_b3e2de1e > div {
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 `;
