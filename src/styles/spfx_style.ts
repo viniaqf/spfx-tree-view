@@ -72,10 +72,23 @@ div[data-automationid^="addColumnLollipop"] {
   overflow: hidden;
 }
 
-.ms-FlowPanel-contents iframe {
-  width: 100%;
-  height: 80% !important;
-  border: 0;
+div[data-automationid="appContentBar"] {
+  display: none !important;
+}
+
+div[data-automationid="appMainContent"] {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+div[data-automationid="spgrid"] {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+div[data-automationid="list-content"] {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 
 `;
