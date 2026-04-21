@@ -72,4 +72,10 @@ div[data-automationid^="addColumnLollipop"] {
   overflow: hidden;
 }
 
+.ms-FlowPanel-contents iframe {
+  width: 100%;
+  height: 80% !important;
+  border: 0;
+}
+
 `;
