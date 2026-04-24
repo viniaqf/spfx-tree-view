@@ -119,6 +119,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     const { selectedLibraryUrl } = this.props;
     const { loading, isRefreshing, isSilentRefreshing, lastModifiedTimestamp } = this.state;
 
+    console.log('[Polling] Verificando atualizações...');
+
     // Não verifica enquanto já há uma carga em andamento
     if (!selectedLibraryUrl || loading || isRefreshing || isSilentRefreshing) return;
 
