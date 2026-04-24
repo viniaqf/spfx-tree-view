@@ -3,7 +3,7 @@ import styles from '../components/TreeView.module.scss';
 import { ITreeViewProps } from './ITreeViewProps';
 import pnp from "sp-pnp-js";
 import { escape } from '@microsoft/sp-lodash-subset';
-import { Icon, PrimaryButton, Spinner, SpinnerSize } from 'office-ui-fabric-react';
+import { Icon, Spinner, SpinnerSize } from 'office-ui-fabric-react';
 import { getTranslations, getUserLanguage } from '../../../utils/getTranslations';
 import IframePreview from './IframePreview';
 import SplitterLayout from 'react-splitter-layout';
@@ -40,9 +40,16 @@ interface IComponentTreeViewState {
 
   expandedKeys: string[];
   selectedKeyToRestore: string | null;
+
+  // ── POLLING ──────────────────────────────────────────────
+  lastModifiedTimestamp: string | null;
+  // true enquanto o polling detectou mudança e está recarregando silenciosamente
+  isSilentRefreshing: boolean;
 }
 
 const t = getTranslations();
+
+const POLLING_INTERVAL_MS = 15_000;
 
 export default class TreeView extends React.Component<ITreeViewProps, IComponentTreeViewState> {
 
@@ -54,6 +61,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     metadataColumn3?: string;
     metadataColumnTypes?: { [key: string]: { type: string; lookupField?: string } };
   } | null = null;
+
+  /** Handle do setInterval do polling */
+  private _pollingInterval: number | null = null;
 
   constructor(props: ITreeViewProps) {
     super(props);
@@ -69,8 +79,121 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
       expandedKeys: [],
       selectedKeyToRestore: null,
+
+      // ── POLLING ──
+      lastModifiedTimestamp: null,
+      isSilentRefreshing: false,
     };
 
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // POLLING — métodos principais
+  // ─────────────────────────────────────────────────────────
+
+  private startPolling(): void {
+    if (this._pollingInterval !== null) return;
+
+    this._pollingInterval = window.setInterval(() => {
+      void this.checkForUpdates();
+    }, POLLING_INTERVAL_MS);
+
+    console.log(`[TreeView] Polling iniciado (intervalo: ${POLLING_INTERVAL_MS / 1000}s)`);
+  }
+
+  private stopPolling(): void {
+    if (this._pollingInterval !== null) {
+      window.clearInterval(this._pollingInterval);
+      this._pollingInterval = null;
+      console.log("[TreeView] Polling encerrado.");
+    }
+  }
+
+  /**
+   * Núcleo do polling.
+   * Consulta apenas o campo "Modified" do item mais recentemente alterado.
+   * Se o timestamp for diferente do salvo em estado, dispara recarregamento
+   * silencioso da árvore, preservando expansão e seleção atuais.
+   */
+  private async checkForUpdates(): Promise<void> {
+    const { selectedLibraryUrl } = this.props;
+    const { loading, isRefreshing, isSilentRefreshing, lastModifiedTimestamp } = this.state;
+
+    // Não verifica enquanto já há uma carga em andamento
+    if (!selectedLibraryUrl || loading || isRefreshing || isSilentRefreshing) return;
+
+    try {
+      // 1. Descobre o Id da lista a partir da URL relativa da biblioteca
+      const listCandidates = await pnp.sp.web.lists
+        .filter(`RootFolder/ServerRelativeUrl eq '${selectedLibraryUrl}'`)
+        .select("Id")
+        .get();
+
+      if (!listCandidates?.[0]?.Id) return;
+
+      // 2. Busca apenas 1 item, ordenado pelo Modified decrescente
+      const latestItems = await pnp.sp.web.lists
+        .getById(listCandidates[0].Id)
+        .items
+        .select("Modified")
+        .orderBy("Modified", false)
+        .top(1)
+        .get();
+
+      if (!latestItems?.[0]?.Modified) return;
+
+      const latestModified: string = latestItems[0].Modified;
+
+      // 3. Primeira execução: apenas registra o timestamp sem recarregar
+      if (!lastModifiedTimestamp) {
+        this.setState({ lastModifiedTimestamp: latestModified });
+        return;
+      }
+
+      // 4. Timestamp diferente → mudança detectada → recarrega silenciosamente
+      if (latestModified !== lastModifiedTimestamp) {
+        console.log(
+          `[TreeView] Mudança detectada (${lastModifiedTimestamp} → ${latestModified}). Recarregando árvore...`
+        );
+
+        // Coleta estado de navegação atual para restaurar após o reload
+        const expandedKeys = this.findExpandedKeys(this.state.treeData);
+        const selectedKeyToRestore = this.state.selectedKey;
+
+        // Guarda o estado no sessionStorage para cobrir cenários de desmontagem/remontagem
+        try {
+          sessionStorage.setItem(
+            'treeViewUiState',
+            JSON.stringify({
+              expandedKeys,
+              selectedKey: selectedKeyToRestore
+            })
+          );
+        } catch (e) {
+          console.warn("Não foi possível salvar o estado da UI no sessionStorage durante o polling:", e);
+        }
+
+        await new Promise<void>(resolve => {
+          this.setState({
+            lastModifiedTimestamp: latestModified,
+            isSilentRefreshing: true,
+            expandedKeys,
+            selectedKeyToRestore,
+          }, resolve);
+        });
+
+        // Invalida apenas o cache de sessão. Não ativa isRefreshing,
+        // para não exibir o overlay completo ao usuário.
+        sessionStorage.removeItem('treeViewCacheData');
+
+        await this.loadTreeData();
+
+        this.setState({ isSilentRefreshing: false });
+      }
+    } catch (err) {
+      // Erros de rede são silenciosos: apenas logados, não exibidos ao usuário
+      console.warn("[TreeView] Erro no polling de atualização:", err);
+    }
   }
 
   private async resolveViewUrl(): Promise<string> {
@@ -140,6 +263,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         const allItems = JSON.parse(cfg.PublishedTreeData);
         this.setState({ allDocumentsCache: allItems });
         this.buildTreeFromData(allItems);
+
+        // Inicia polling mesmo quando dados vieram do cache publicado
+        this.startPolling();
         return;
       }
     } catch (err) {
@@ -148,6 +274,14 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     // Se não encontrou o cache persistente, tenta o cache de sessão ou busca dados novos.
     await this.checkAndLoadCache();
+
+    // Inicia polling após carregamento inicial
+    this.startPolling();
+  }
+
+  /** Para o polling ao desmontar o componente para evitar vazamento de memória. */
+  public componentWillUnmount(): void {
+    this.stopPolling();
   }
 
   public async componentDidUpdate(prevProps: ITreeViewProps): Promise<void> {
@@ -163,8 +297,16 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     // limpamos o cache e recarregamos os dados.
     if (libraryChanged || columnsChanged) {
       console.log("Propriedades de biblioteca/colunas mudaram. Recarregando cache...");
+
+      // Reseta o timestamp para que o polling não dispare um reload duplo
+      this.setState({ lastModifiedTimestamp: null });
+
       sessionStorage.removeItem('treeViewCacheData');
       await this.checkAndLoadCache();
+
+      // Reinicia o polling com a nova biblioteca
+      this.stopPolling();
+      this.startPolling();
     }
   }
 
@@ -197,56 +339,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     // Se o cache não for válido, busca os dados da API
     await this.loadTreeData();
-  }
-
-  private handleForceRefresh = async (): Promise<void> => {
-    if (!this.props.onForceRefresh) {
-      console.warn("Propriedade onForceRefresh não foi fornecida.");
-      return;
-    }
-
-    // Coleta o estado atual da navegação
-    const expandedKeys = this.findExpandedKeys(this.state.treeData);
-    const selectedKeyToRestore = this.state.selectedKey;
-
-    // Guarda o estado no sessionStorage (caso o Web Part seja desmontado)
-    // Guarda o estado no sessionStorage (caso o Web Part seja desmontado)
-    try {
-      sessionStorage.setItem(
-        'treeViewUiState',
-        JSON.stringify({
-          expandedKeys,
-          selectedKey: selectedKeyToRestore
-        })
-      );
-    } catch (e) {
-      console.warn("Não foi possível salvar o estado da UI no sessionStorage:", e);
-    }
-
-    //  ADD: tira um snapshot das props ANTES do choque de propriedades
-    this._refreshSnapshot = {
-      selectedLibraryUrl: this.props.selectedLibraryUrl,
-      metadataColumn1: this.props.metadataColumn1,
-      metadataColumn2: this.props.metadataColumn2,
-      metadataColumn3: this.props.metadataColumn3,
-      metadataColumnTypes: this.props.metadataColumnTypes
-    };
-
-    this.setState({
-      isRefreshing: true,
-      loading: true,
-      expandedKeys,
-      selectedKeyToRestore
-    });
-
-
-    try {
-      // Chama o método da Web Part que limpa o cache e faz o choque de propriedade
-      await this.props.onForceRefresh();
-    } catch (e) {
-      console.error("Falha ao forçar a atualização dos dados da árvore:", e);
-      this.setState({ isRefreshing: false, loading: false, error: t.error_loading_data });
-    }
   }
 
   /**
@@ -307,7 +399,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   private buildTreeFromData(allItems: any[]): void {
     const { selectedLibraryUrl, selectedLibraryTitle, metadataColumn1 } = this.props;
 
-    // Tenta usar o estado que está em memória (salvo em handleForceRefresh)
+    // Tenta usar o estado que está em memória (salvo durante refresh automático ou recarregamento)
     let { expandedKeys, selectedKeyToRestore } = this.state;
 
     // ...e, se estiver vazio, tenta recuperar do sessionStorage (caso tenha havido unmount/remount).
@@ -481,8 +573,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
 
     // Limpa eventual erro de "sem biblioteca" e começa loading
+    // Durante o polling, mantém loading=false para não exibir o carregamento manual/overlay.
     this.setState({
-      loading: true,
+      loading: this.state.isSilentRefreshing ? false : true,
       error: this.state.error === t.noLibrary ? "" : this.state.error
     });
 
@@ -620,7 +713,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         loading: false,
         treeData: [],
         allDocumentsCache: [],
-        isRefreshing: false
+        isRefreshing: false,
+        isSilentRefreshing: false
       });
     }
   }
@@ -1091,8 +1185,8 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   public render(): React.ReactElement<ITreeViewProps> {
-    const { loading, error, treeData, iframeUrl, selectedKey, isRefreshing } = this.state;
-    const { onForceRefresh, selectedLibraryUrl } = this.props;
+    const { loading, error, treeData, iframeUrl, selectedKey, isRefreshing, isSilentRefreshing } = this.state;
+    const { selectedLibraryUrl } = this.props;
 
     const lang = (getUserLanguage() || "pt").toLowerCase();
     const newTitle =
@@ -1153,6 +1247,28 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     return (
       <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`}>
+        {/* Indicador discreto de sincronização automática */}
+        {isSilentRefreshing && (
+          <div style={{
+            position: 'absolute',
+            top: 6,
+            right: 10,
+            zIndex: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: 'rgba(255,255,255,0.85)',
+            borderRadius: 12,
+            padding: '3px 10px',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+            fontSize: 12,
+            color: '#444',
+          }}>
+            <Spinner size={SpinnerSize.xSmall} />
+            <span>Sincronizando...</span>
+          </div>
+        )}
+
         <SplitterLayout
           percentage
           primaryIndex={1}
@@ -1167,19 +1283,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
               <div className={styles.refreshOverlay}>
                 <Spinner size={SpinnerSize.large} label={t.reloading || "Atualizando dados da biblioteca..."} />
                 <p style={{ marginTop: '10px' }}>Por favor, aguarde.</p>
-              </div>
-            )}
-
-            {/* Botão de atualização visível */}
-            {onForceRefresh && selectedLibraryUrl && (
-              <div style={{ padding: '5px 10px 10px 10px' }}>
-                <PrimaryButton
-                  onClick={this.handleForceRefresh}
-                  text={t.reloadContents || "Atualizar Dados"}
-                  disabled={loading || isRefreshing}
-                  iconProps={{ iconName: 'Refresh' }}
-                  styles={{ root: { width: '100%' } }}
-                />
               </div>
             )}
 
