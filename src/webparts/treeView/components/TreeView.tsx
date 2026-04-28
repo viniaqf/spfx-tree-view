@@ -49,7 +49,7 @@ interface IComponentTreeViewState {
 
 const t = getTranslations();
 
-const POLLING_INTERVAL_MS = 15_000;
+const POLLING_INTERVAL_MS = 60_000;
 
 export default class TreeView extends React.Component<ITreeViewProps, IComponentTreeViewState> {
 
