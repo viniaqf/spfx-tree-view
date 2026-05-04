@@ -4,8 +4,10 @@
 @import "~office-ui-fabric-react/dist/sass/References.scss";
 
 .treeViewContainer {
+  display: flex;
+  flex-direction: row;
   height: calc(
-    100vh - 120px
+    100vh - 180px
   ); // ocupa a altura total da janela, subtraindo o cabeçalho e rodapé.
   gap: 20px; //
 }
@@ -13,6 +15,7 @@
 .treeView {
   padding: 1em;
   overflow-y: auto;
+  flex-shrink: 0;
   color: "[theme:bodyText, default: #323130]";
   color: var(--bodyText);
   font-family: $ms-font-family-fallbacks;
@@ -25,8 +28,9 @@
   border: 1px solid "[theme:bodyDivider, default:#edebe9]";
   border: 1px solid var(--bodyDivider);
   padding: 10px;
-  max-height: none; // Alterado para não ter altura máxima
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
   background-color: "[theme:white, default:#ffffff]";
   background-color: var(--white);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);

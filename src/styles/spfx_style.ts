@@ -72,6 +72,12 @@ div[data-automationid^="addColumnLollipop"] {
   overflow: hidden;
 }
 
+.iframeContainer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 div[data-automationid="appContentBar"] {
   display: none !important;
 }
@@ -89,6 +95,10 @@ div[data-automationid="spgrid"] {
 div[data-automationid="list-content"] {
   margin-top: 0 !important;
   padding-top: 0 !important;
+}
+
+#CommentsWrapper {
+  display: none !important;
 }
 
 `;
