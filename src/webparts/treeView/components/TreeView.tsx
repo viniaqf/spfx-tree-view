@@ -772,7 +772,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       if (val) unique.add(String(val));
     });
 
-    return Array.from(unique).sort().map(value => ({
+    const nodesUnsorted = Array.from(unique).map(value => ({
       key: `${colStr}-${value}-${currentLevel}-${this.buildFilterQueryForItems([...currentFilters, { column: colStr, value }])}`,
       label: this.getLabelWithOptionalId(colStr, value, docs),
       icon: "Tag",
@@ -785,6 +785,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       isClicked: false,
       filterQuery: this.buildFilterQueryForItems([...currentFilters, { column: colStr, value }])
     }));
+
+    return nodesUnsorted.sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' })
+    );
 
   };
 
