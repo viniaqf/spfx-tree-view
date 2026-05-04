@@ -15,7 +15,6 @@
 .treeView {
   padding: 1em;
   overflow-y: auto;
-  flex-shrink: 0;
   color: "[theme:bodyText, default: #323130]";
   color: var(--bodyText);
   font-family: $ms-font-family-fallbacks;
@@ -80,7 +79,7 @@
   font-style: italic;
 }
 .iframeContainer {
-  height: calc(100vh - 120px);
+  height: calc(100vh - 180px);
 }
 
 .selectedNodeLabel {

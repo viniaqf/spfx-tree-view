@@ -72,11 +72,6 @@ div[data-automationid^="addColumnLollipop"] {
   overflow: hidden;
 }
 
-.iframeContainer {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
 
 div[data-automationid="appContentBar"] {
   display: none !important;
