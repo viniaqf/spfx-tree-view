@@ -1,16 +1,24 @@
-import * as React from 'react';
-import styles from '../components/TreeView.module.scss';
-import { ITreeViewProps } from './ITreeViewProps';
+import * as React from "react";
+import styles from "../components/TreeView.module.scss";
+import { ITreeViewProps } from "./ITreeViewProps";
 import pnp from "sp-pnp-js";
-import { escape } from '@microsoft/sp-lodash-subset';
-import { Icon, PrimaryButton, Spinner, SpinnerSize } from 'office-ui-fabric-react';
-import { getTranslations, getUserLanguage } from '../../../utils/getTranslations';
-import IframePreview from './IframePreview';
-import SplitterLayout from 'react-splitter-layout';
-import 'react-splitter-layout/lib/index.css';
-import TreeViewConfigService from '../services/TreeViewConfigService';
-import { injectCssStringOnce } from '../../../utils/localCssInjector';
-import { HIDE_SWITCHER_CSS } from '../../../styles/spfx_style';
+import { escape } from "@microsoft/sp-lodash-subset";
+import {
+  Icon,
+  PrimaryButton,
+  Spinner,
+  SpinnerSize,
+} from "office-ui-fabric-react";
+import {
+  getTranslations,
+  getUserLanguage,
+} from "../../../utils/getTranslations";
+import IframePreview from "./IframePreview";
+import SplitterLayout from "react-splitter-layout";
+import "react-splitter-layout/lib/index.css";
+import TreeViewConfigService from "../services/TreeViewConfigService";
+import { injectCssStringOnce } from "../../../utils/localCssInjector";
+import { HIDE_SWITCHER_CSS } from "../../../styles/spfx_style";
 
 interface ITreeNode {
   key: string;
@@ -44,15 +52,19 @@ interface IComponentTreeViewState {
 
 const t = getTranslations();
 
-export default class TreeView extends React.Component<ITreeViewProps, IComponentTreeViewState> {
-
+export default class TreeView extends React.Component<
+  ITreeViewProps,
+  IComponentTreeViewState
+> {
   //snapshot usado somente durante o refresh forçado (botão "Atualizar Dados")
   private _refreshSnapshot: {
     selectedLibraryUrl?: string;
     metadataColumn1?: string;
     metadataColumn2?: string;
     metadataColumn3?: string;
-    metadataColumnTypes?: { [key: string]: { type: string; lookupField?: string } };
+    metadataColumnTypes?: {
+      [key: string]: { type: string; lookupField?: string };
+    };
   } | null = null;
 
   constructor(props: ITreeViewProps) {
@@ -70,7 +82,6 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       expandedKeys: [],
       selectedKeyToRestore: null,
     };
-
   }
 
   private async resolveViewUrl(): Promise<string> {
@@ -92,8 +103,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       if (listCandidates && listCandidates.length > 0) {
         const listId = listCandidates[0].Id;
 
-        const viewInfo = await pnp.sp.web.lists.getById(listId).views
-          .getById(targetViewId)
+        const viewInfo = await pnp.sp.web.lists
+          .getById(listId)
+          .views.getById(targetViewId)
           .select("ServerRelativeUrl")
           .get();
 
@@ -102,7 +114,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         }
       }
     } catch (error) {
-      console.warn(`Erro ao resolver URL da View para o ID ${targetViewId}`, error);
+      console.warn(
+        `Erro ao resolver URL da View para o ID ${targetViewId}`,
+        error,
+      );
     }
 
     return selectedLibraryUrl || "";
@@ -117,20 +132,21 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
   }
 
-
   private async getDefaultLibraryViewUrl(): Promise<string> {
     return this.resolveViewUrl();
   }
 
   public async componentDidMount(): Promise<void> {
-    injectCssStringOnce(HIDE_SWITCHER_CSS, 'treeview_hide_switcher_css');
+    injectCssStringOnce(HIDE_SWITCHER_CSS, "treeview_hide_switcher_css");
 
     const pageUrl = TreeViewConfigService.getCurrentPageUrl();
     try {
       const cfg = await TreeViewConfigService.loadByPage(pageUrl);
 
       if (!this.props.selectedLibraryUrl) {
-        console.log("URL de biblioteca faltando no componentDidMount. Aguardando choque de propriedades ser concluído.");
+        console.log(
+          "URL de biblioteca faltando no componentDidMount. Aguardando choque de propriedades ser concluído.",
+        );
         // Se a Web Part está no estado 'nulo', não tente carregar nada ainda, apenas espere.
         this.setState({ loading: true, isRefreshing: true });
         return;
@@ -143,7 +159,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         return;
       }
     } catch (err) {
-      console.warn("Não foi possível ler config/JSON publicado. Seguindo com fluxo online.", err);
+      console.warn(
+        "Não foi possível ler config/JSON publicado. Seguindo com fluxo online.",
+        err,
+      );
     }
 
     // Se não encontrou o cache persistente, tenta o cache de sessão ou busca dados novos.
@@ -159,16 +178,20 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       this.props.metadataColumn2 !== prevProps.metadataColumn2 ||
       this.props.metadataColumn3 !== prevProps.metadataColumn3;
 
+    const viewsChanged =
+      this.props.viewIdPT !== prevProps.viewIdPT ||
+      this.props.viewIdES !== prevProps.viewIdES;
+
     // Sempre que a biblioteca ou as colunas de metadados mudarem,
     // limpamos o cache e recarregamos os dados.
-    if (libraryChanged || columnsChanged) {
-      console.log("Propriedades de biblioteca/colunas mudaram. Recarregando cache...");
-      sessionStorage.removeItem('treeViewCacheData');
+    if (libraryChanged || columnsChanged || viewsChanged) {
+      console.log(
+        "Propriedades de biblioteca/colunas/views mudaram. Recarregando cache...",
+      );
+      sessionStorage.removeItem("treeViewCacheData");
       await this.checkAndLoadCache();
     }
   }
-
-
 
   /**
    * Método para verificar e carregar os dados do cache.
@@ -177,7 +200,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   private async checkAndLoadCache(): Promise<void> {
     const { metadataColumn1, metadataColumn2, metadataColumn3 } = this.props;
 
-    const cacheKey = 'treeViewCacheData';
+    const cacheKey = "treeViewCacheData";
     const cachedData = sessionStorage.getItem(cacheKey);
 
     if (cachedData) {
@@ -185,8 +208,14 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       const cachedColumns = parsedData.columns;
       const allItems = parsedData.items;
 
-      const currentColumns = [metadataColumn1, metadataColumn2, metadataColumn3].filter(Boolean);
-      const cacheIsValid = JSON.stringify(currentColumns.sort()) === JSON.stringify(cachedColumns.sort());
+      const currentColumns = [
+        metadataColumn1,
+        metadataColumn2,
+        metadataColumn3,
+      ].filter(Boolean);
+      const cacheIsValid =
+        JSON.stringify(currentColumns.sort()) ===
+        JSON.stringify(cachedColumns.sort());
 
       if (cacheIsValid) {
         this.setState({ allDocumentsCache: allItems });
@@ -213,14 +242,17 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     // Guarda o estado no sessionStorage (caso o Web Part seja desmontado)
     try {
       sessionStorage.setItem(
-        'treeViewUiState',
+        "treeViewUiState",
         JSON.stringify({
           expandedKeys,
-          selectedKey: selectedKeyToRestore
-        })
+          selectedKey: selectedKeyToRestore,
+        }),
       );
     } catch (e) {
-      console.warn("Não foi possível salvar o estado da UI no sessionStorage:", e);
+      console.warn(
+        "Não foi possível salvar o estado da UI no sessionStorage:",
+        e,
+      );
     }
 
     //  ADD: tira um snapshot das props ANTES do choque de propriedades
@@ -229,32 +261,35 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       metadataColumn1: this.props.metadataColumn1,
       metadataColumn2: this.props.metadataColumn2,
       metadataColumn3: this.props.metadataColumn3,
-      metadataColumnTypes: this.props.metadataColumnTypes
+      metadataColumnTypes: this.props.metadataColumnTypes,
     };
 
     this.setState({
       isRefreshing: true,
       loading: true,
       expandedKeys,
-      selectedKeyToRestore
+      selectedKeyToRestore,
     });
-
 
     try {
       // Chama o método da Web Part que limpa o cache e faz o choque de propriedade
       await this.props.onForceRefresh();
     } catch (e) {
       console.error("Falha ao forçar a atualização dos dados da árvore:", e);
-      this.setState({ isRefreshing: false, loading: false, error: t.error_loading_data });
+      this.setState({
+        isRefreshing: false,
+        loading: false,
+        error: t.error_loading_data,
+      });
     }
-  }
+  };
 
   /**
    * Função auxiliar para coletar todas as chaves expandidas atualmente.
    */
   private findExpandedKeys = (nodes: ITreeNode[]): string[] => {
     let keys: string[] = [];
-    nodes.forEach(n => {
+    nodes.forEach((n) => {
       if (n.isExpanded) {
         keys.push(n.key);
         if (n.children) {
@@ -263,15 +298,19 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       }
     });
     return keys;
-  }
+  };
 
   /**
    * Função auxiliar para aplicar o estado de expansão e seleção à nova árvore.
    */
-  private applyRestoredState = (nodes: ITreeNode[], expandedKeys: string[], selectedKeyToRestore: string | null): ITreeNode[] => {
+  private applyRestoredState = (
+    nodes: ITreeNode[],
+    expandedKeys: string[],
+    selectedKeyToRestore: string | null,
+  ): ITreeNode[] => {
     let selectionFound = false;
 
-    const newNodes = nodes.map(n => {
+    const newNodes = nodes.map((n) => {
       let newNode = { ...n };
 
       if (newNode.isFolder && expandedKeys.includes(newNode.key)) {
@@ -284,7 +323,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         newNode.isClicked = false;
       }
       if (newNode.children) {
-        newNode.children = this.applyRestoredState(newNode.children, expandedKeys, selectedKeyToRestore);
+        newNode.children = this.applyRestoredState(
+          newNode.children,
+          expandedKeys,
+          selectedKeyToRestore,
+        );
       }
 
       return newNode;
@@ -295,17 +338,18 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       this.setState({ selectedKey: selectedKeyToRestore });
       const selectedNode = this.findNodeInTree(newNodes, selectedKeyToRestore);
       if (selectedNode && selectedNode.isFolder && selectedNode.level > 0) {
-        this.buildIframeUrl(selectedNode).then(iframeUrl => {
+        this.buildIframeUrl(selectedNode).then((iframeUrl) => {
           this.setState({ iframeUrl });
         });
       }
     }
 
     return newNodes;
-  }
+  };
 
   private buildTreeFromData(allItems: any[]): void {
-    const { selectedLibraryUrl, selectedLibraryTitle, metadataColumn1 } = this.props;
+    const { selectedLibraryUrl, selectedLibraryTitle, metadataColumn1 } =
+      this.props;
 
     // Tenta usar o estado que está em memória (salvo em handleForceRefresh)
     let { expandedKeys, selectedKeyToRestore } = this.state;
@@ -313,14 +357,17 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     // ...e, se estiver vazio, tenta recuperar do sessionStorage (caso tenha havido unmount/remount).
     if ((!expandedKeys || expandedKeys.length === 0) && !selectedKeyToRestore) {
       try {
-        const rawUiState = sessionStorage.getItem('treeViewUiState');
+        const rawUiState = sessionStorage.getItem("treeViewUiState");
         if (rawUiState) {
           const parsed = JSON.parse(rawUiState);
           expandedKeys = parsed.expandedKeys || [];
           selectedKeyToRestore = parsed.selectedKey || null;
         }
       } catch (e) {
-        console.warn("Não foi possível ler o estado da UI do sessionStorage:", e);
+        console.warn(
+          "Não foi possível ler o estado da UI do sessionStorage:",
+          e,
+        );
       }
     }
 
@@ -334,7 +381,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       isExpanded: true, // Raiz sempre expandida
       level: 0,
       filterQuery: "",
-      isClicked: false
+      isClicked: false,
     };
 
     let firstLevelNodes: ITreeNode[] = [];
@@ -346,40 +393,54 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     libraryRootNode.children = firstLevelNodes;
 
-    const fullTree = this.applyRestoredState([libraryRootNode], expandedKeys || [], selectedKeyToRestore || null);
+    const fullTree = this.applyRestoredState(
+      [libraryRootNode],
+      expandedKeys || [],
+      selectedKeyToRestore || null,
+    );
 
     // Limpa o registro temporário no sessionStorage (já restauramos)
     try {
-      sessionStorage.removeItem('treeViewUiState');
-    } catch { /* ignore */ }
+      sessionStorage.removeItem("treeViewUiState");
+    } catch {
+      /* ignore */
+    }
 
     const restoredExpandedKeys = expandedKeys || [];
 
     // Atualiza estado e, na callback, restaura a expansão dos nós em ordem de nível
-    this.setState({
-      treeData: fullTree,
-      loading: false,
-      error: "",
-      isRefreshing: false,
-      expandedKeys: [],
-      selectedKeyToRestore: null
-    }, () => {
-      // snapshot não é mais necessário
-      this._refreshSnapshot = null;
+    this.setState(
+      {
+        treeData: fullTree,
+        loading: false,
+        error: "",
+        isRefreshing: false,
+        expandedKeys: [],
+        selectedKeyToRestore: null,
+      },
+      () => {
+        // snapshot não é mais necessário
+        this._refreshSnapshot = null;
 
-      this.restoreExpandedNodes(restoredExpandedKeys);
-    });
-
+        this.restoreExpandedNodes(restoredExpandedKeys);
+      },
+    );
   }
 
   /**
    * Ajusta o isExpanded de um nó específico (sem dar toggle).
    */
-  private setNodeExpanded = (nodes: ITreeNode[], key: string, expanded: boolean): ITreeNode[] =>
-    nodes.map(n => ({
+  private setNodeExpanded = (
+    nodes: ITreeNode[],
+    key: string,
+    expanded: boolean,
+  ): ITreeNode[] =>
+    nodes.map((n) => ({
       ...n,
       isExpanded: n.key === key ? expanded : n.isExpanded,
-      children: n.children ? this.setNodeExpanded(n.children, key, expanded) : n.children
+      children: n.children
+        ? this.setNodeExpanded(n.children, key, expanded)
+        : n.children,
     }));
 
   /**
@@ -401,44 +462,58 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
    * Retorna uma Promise que resolve quando o nó (e seus filhos) estiverem prontos.
    */
   private expandNodeForRestoreAsync(nodeKey: string): Promise<void> {
-    return new Promise(resolve => {
-      this.setState(prev => ({
-        treeData: this.setNodeExpanded(prev.treeData, nodeKey, true)
-      }), async () => {
-        const updated = this.findNodeInTree(this.state.treeData, nodeKey);
-        if (updated && updated.isFolder && updated.children?.length === 0) {
-          this.setState({ loading: true });
+    return new Promise((resolve) => {
+      this.setState(
+        (prev) => ({
+          treeData: this.setNodeExpanded(prev.treeData, nodeKey, true),
+        }),
+        async () => {
+          const updated = this.findNodeInTree(this.state.treeData, nodeKey);
+          if (updated && updated.isFolder && updated.children?.length === 0) {
+            this.setState({ loading: true });
 
-          const nextLevel = updated.level + 1;
-          const column = this.getColumnForLevel(nextLevel);
+            const nextLevel = updated.level + 1;
+            const column = this.getColumnForLevel(nextLevel);
 
-          const filters = updated.filterQuery?.split(" and ").map(f => {
-            const [col, val] = f.split(" eq ");
-            if (val === undefined || val === null) {
-              this.setState({
-                error: "O metadado selecionado para compor o menu ainda não possui nenhum valor. É necessário que o metadado selecionado possua valor em algum documento.",
-                loading: false // SNO365-133
-              });
-            }
-            return { column: col, value: (val || "").replace(/'/g, "") };
-          }) ?? [];
+            const filters =
+              updated.filterQuery?.split(" and ").map((f) => {
+                const [col, val] = f.split(" eq ");
+                if (val === undefined || val === null) {
+                  this.setState({
+                    error:
+                      "O metadado selecionado para compor o menu ainda não possui nenhum valor. É necessário que o metadado selecionado possua valor em algum documento.",
+                    loading: false, // SNO365-133
+                  });
+                }
+                return { column: col, value: (val || "").replace(/'/g, "") };
+              }) ?? [];
 
-          const scopedDocs = this.state.allDocumentsCache.filter(doc =>
-            filters.every(f => String(this.getFieldValue(doc, f.column)) === f.value)
-          );
+            const scopedDocs = this.state.allDocumentsCache.filter((doc) =>
+              filters.every(
+                (f) => String(this.getFieldValue(doc, f.column)) === f.value,
+              ),
+            );
 
-          const children = column
-            ? this.buildMetadataTreeLevel(nextLevel, filters, scopedDocs)
-            : this.getDocumentsInThisScope(scopedDocs);
+            const children = column
+              ? this.buildMetadataTreeLevel(nextLevel, filters, scopedDocs)
+              : this.getDocumentsInThisScope(scopedDocs);
 
-          this.setState(prev => ({
-            treeData: this.addChildrenToNode(prev.treeData, nodeKey, children),
-            loading: false
-          }), () => resolve());
-        } else {
-          resolve();
-        }
-      });
+            this.setState(
+              (prev) => ({
+                treeData: this.addChildrenToNode(
+                  prev.treeData,
+                  nodeKey,
+                  children,
+                ),
+                loading: false,
+              }),
+              () => resolve(),
+            );
+          } else {
+            resolve();
+          }
+        },
+      );
     });
   }
 
@@ -450,7 +525,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     if (!expandedKeys || expandedKeys.length === 0) return;
 
     // Remove a raiz (selectedLibraryUrl) se estiver na lista
-    const filtered = expandedKeys.filter(k => k && k !== this.props.selectedLibraryUrl);
+    const filtered = expandedKeys.filter(
+      (k) => k && k !== this.props.selectedLibraryUrl,
+    );
 
     // Ordena por nível ascendente (1, depois 2, depois 3, ...)
     filtered.sort((a, b) => this.getLevelFromKey(a) - this.getLevelFromKey(b));
@@ -467,37 +544,59 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     const useSnapshot = this.state.isRefreshing && this._refreshSnapshot;
 
     const config = {
-      selectedLibraryUrl: useSnapshot ? this._refreshSnapshot!.selectedLibraryUrl : this.props.selectedLibraryUrl,
-      metadataColumn1: useSnapshot ? this._refreshSnapshot!.metadataColumn1 : this.props.metadataColumn1,
-      metadataColumn2: useSnapshot ? this._refreshSnapshot!.metadataColumn2 : this.props.metadataColumn2,
-      metadataColumn3: useSnapshot ? this._refreshSnapshot!.metadataColumn3 : this.props.metadataColumn3,
-      metadataColumnTypes: useSnapshot ? this._refreshSnapshot!.metadataColumnTypes : this.props.metadataColumnTypes
+      selectedLibraryUrl: useSnapshot
+        ? this._refreshSnapshot!.selectedLibraryUrl
+        : this.props.selectedLibraryUrl,
+      metadataColumn1: useSnapshot
+        ? this._refreshSnapshot!.metadataColumn1
+        : this.props.metadataColumn1,
+      metadataColumn2: useSnapshot
+        ? this._refreshSnapshot!.metadataColumn2
+        : this.props.metadataColumn2,
+      metadataColumn3: useSnapshot
+        ? this._refreshSnapshot!.metadataColumn3
+        : this.props.metadataColumn3,
+      metadataColumnTypes: useSnapshot
+        ? this._refreshSnapshot!.metadataColumnTypes
+        : this.props.metadataColumnTypes,
     };
 
     // Sem URL de biblioteca: nada pra carregar
     if (!config.selectedLibraryUrl) {
-      this.setState({ loading: false, isRefreshing: false, error: t.noLibrary });
+      this.setState({
+        loading: false,
+        isRefreshing: false,
+        error: t.noLibrary,
+      });
       return;
     }
 
     // Limpa eventual erro de "sem biblioteca" e começa loading
     this.setState({
       loading: true,
-      error: this.state.error === t.noLibrary ? "" : this.state.error
+      error: this.state.error === t.noLibrary ? "" : this.state.error,
     });
 
     try {
-      const listInfo = (await pnp.sp.web.lists
-        .filter(`RootFolder/ServerRelativeUrl eq '${config.selectedLibraryUrl}'`)
-        .select("Id")
-        .get())[0];
+      const listInfo = (
+        await pnp.sp.web.lists
+          .filter(
+            `RootFolder/ServerRelativeUrl eq '${config.selectedLibraryUrl}'`,
+          )
+          .select("Id")
+          .get()
+      )[0];
 
       if (!listInfo?.Id) {
         throw new Error(t.error_library_url_not_found);
       }
 
       // Verifica se precisa buscar ID da lista de Normativos
-      const colsToCheck = [config.metadataColumn1, config.metadataColumn2, config.metadataColumn3];
+      const colsToCheck = [
+        config.metadataColumn1,
+        config.metadataColumn2,
+        config.metadataColumn3,
+      ];
       if (colsToCheck.includes("aplicacaoNormativo")) {
         await this.getAplicacaoNormativoListId(listInfo.Id);
       }
@@ -507,17 +606,23 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
       // Campos padrão obrigatórios
       const selectSet = new Set<string>([
-        "ID", "FileRef", "FileLeafRef", "ContentTypeId", "FSObjType"
+        "ID",
+        "FileRef",
+        "FileLeafRef",
+        "ContentTypeId",
+        "FSObjType",
       ]);
       const expandSet = new Set<string>();
 
-      columnsToProcess.forEach(col => {
-        const baseInternalName = col.split("/")[0];    // ex: Area_x0020_Gestora
+      columnsToProcess.forEach((col) => {
+        const baseInternalName = col.split("/")[0]; // ex: Area_x0020_Gestora
         const explicitFieldFromCol = col.includes("/") // ex: "Title" em "Area_x0020_Gestora/Title"
           ? col.split("/")[1]
           : undefined;
 
-        const colMeta = config.metadataColumnTypes?.[col] || config.metadataColumnTypes?.[baseInternalName];
+        const colMeta =
+          config.metadataColumnTypes?.[col] ||
+          config.metadataColumnTypes?.[baseInternalName];
 
         // --- CASO 1: aplicacaoNormativo (PT/ES) ---
         if (baseInternalName === "aplicacaoNormativo") {
@@ -548,7 +653,12 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         }
 
         // --- CASO 4: Lookup / User / ManagedMetadata genérico ---
-        if (colMeta && (colMeta.type === "Lookup" || colMeta.type === "User" || colMeta.type === "ManagedMetadata")) {
+        if (
+          colMeta &&
+          (colMeta.type === "Lookup" ||
+            colMeta.type === "User" ||
+            colMeta.type === "ManagedMetadata")
+        ) {
           const field = colMeta.lookupField || explicitFieldFromCol || "Title";
 
           selectSet.add(`${baseInternalName}/Id`);
@@ -558,7 +668,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         }
 
         // --- CASO 5: MMD v1 (campo terminando com 0 ou _0) ---
-        if ((baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) && !baseInternalName.includes("/")) {
+        if (
+          (baseInternalName.endsWith("0") || baseInternalName.endsWith("_0")) &&
+          !baseInternalName.includes("/")
+        ) {
           const normalized = baseInternalName.endsWith("_0")
             ? baseInternalName.slice(0, -2)
             : baseInternalName.slice(0, -1);
@@ -587,15 +700,69 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       console.log("DEBUG FINAL $SELECT:", finalSelectColumns.join(", "));
       console.log("DEBUG FINAL $EXPAND:", expandStatements.join(", "));
 
-      const allItems = await pnp.sp.web.lists.getById(listInfo.Id).items
-        .select(...finalSelectColumns)
-        .expand(...expandStatements)
-        .getAll();
+      // --- INÍCIO DA NOVA LÓGICA DE FILTRO PELA VIEW ---
+      const lang = (getUserLanguage() || "pt").toLowerCase();
+      const targetViewId = lang.startsWith("es")
+        ? this.props.viewIdES
+        : this.props.viewIdPT;
 
-      sessionStorage.setItem('treeViewCacheData', JSON.stringify({
-        items: allItems,
-        columns: columnsToProcess
-      }));
+      let allItems: any[] = [];
+
+      if (targetViewId) {
+        try {
+          // 1. Busca os filtros internos (Query) configurados na View
+          const viewInfo = await pnp.sp.web.lists
+            .getById(listInfo.Id)
+            .views.getById(targetViewId)
+            .select("ViewQuery")
+            .get();
+
+          // 2. Extrai os nomes limpos das colunas para injetar na busca (sem as barras de lookups como '/Id')
+          const uniqueFields = Array.from(
+            new Set(finalSelectColumns.map((col) => col.split("/")[0])),
+          );
+          const viewFieldsXml = uniqueFields
+            .map((col) => `<FieldRef Name="${col}" />`)
+            .join("");
+
+          // 3. Monta a busca CAML mesclando os filtros da View com as colunas necessárias
+          const camlQuery = {
+            ViewXml: `<View Scope="RecursiveAll"><Query>${viewInfo.ViewQuery}</Query><ViewFields>${viewFieldsXml}</ViewFields><RowLimit Paged="FALSE">4999</RowLimit></View>`,
+          };
+
+          // 4. Busca os itens respeitando a View e aplica os Expands configurados
+          allItems = await pnp.sp.web.lists
+            .getById(listInfo.Id)
+            .getItemsByCAMLQuery(camlQuery, ...expandStatements);
+        } catch (error) {
+          console.warn(
+            `Erro ao filtrar árvore pela View (ID: ${targetViewId}). Usando fallback (todos os itens).`,
+            error,
+          );
+          // Fallback de segurança se o ID da View for inválido
+          allItems = await pnp.sp.web.lists
+            .getById(listInfo.Id)
+            .items.select(...finalSelectColumns)
+            .expand(...expandStatements)
+            .getAll();
+        }
+      } else {
+        // Comportamento original se nenhuma View foi configurada no painel
+        allItems = await pnp.sp.web.lists
+          .getById(listInfo.Id)
+          .items.select(...finalSelectColumns)
+          .expand(...expandStatements)
+          .getAll();
+      }
+      // --- FIM DA NOVA LÓGICA ---
+
+      sessionStorage.setItem(
+        "treeViewCacheData",
+        JSON.stringify({
+          items: allItems,
+          columns: columnsToProcess,
+        }),
+      );
 
       this.setState({ allDocumentsCache: allItems });
       this.buildTreeFromData(allItems);
@@ -607,12 +774,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           pageUrl,
           JSON.stringify(allItems),
           config.selectedLibraryUrl || "",
-          hierarchy
+          hierarchy,
         );
       } catch (e) {
         console.warn("Falha ao publicar JSON na lista TreeViewConfigs", e);
       }
-
     } catch (error) {
       console.error("ERRO GRAVE NA BUSCA DE DADOS:", error);
       this.setState({
@@ -620,7 +786,7 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
         loading: false,
         treeData: [],
         allDocumentsCache: [],
-        isRefreshing: false
+        isRefreshing: false,
       });
     }
   }
@@ -631,9 +797,10 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
    */
   private async getAplicacaoNormativoListId(listId: string): Promise<void> {
     try {
-      const fieldInfo = await pnp.sp.web.lists.getById(listId).fields
-        .filter(`InternalName eq 'aplicacaoNormativo'`)
-        .select('LookupList')
+      const fieldInfo = await pnp.sp.web.lists
+        .getById(listId)
+        .fields.filter(`InternalName eq 'aplicacaoNormativo'`)
+        .select("LookupList")
         .get();
 
       if (fieldInfo && fieldInfo.length > 0) {
@@ -645,51 +812,65 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   private getDocumentsInThisScope = (docs: any[]): ITreeNode[] =>
-    docs.filter(doc =>
-      doc.FileRef && doc.FileLeafRef &&
-      (doc.FSObjType === 0 || (doc.ContentTypeId && !doc.ContentTypeId.startsWith("0x0120")))
-    ).map(doc => ({
-      key: doc.FileRef,
-      label: doc.FileLeafRef,
-      icon: this.getFileIcon(doc.FileLeafRef),
-      url: doc.FileRef + '?web=1',
-      isFolder: false,
-      level: 99,
-      isClicked: false
-    }));
+    docs
+      .filter(
+        (doc) =>
+          doc.FileRef &&
+          doc.FileLeafRef &&
+          (doc.FSObjType === 0 ||
+            (doc.ContentTypeId && !doc.ContentTypeId.startsWith("0x0120"))),
+      )
+      .map((doc) => ({
+        key: doc.FileRef,
+        label: doc.FileLeafRef,
+        icon: this.getFileIcon(doc.FileLeafRef),
+        url: doc.FileRef + "?web=1",
+        isFolder: false,
+        level: 99,
+        isClicked: false,
+      }));
 
   private buildMetadataTreeLevel = (
     currentLevel: number,
     currentFilters: { column: string; value: string }[],
-    docs: any[]
+    docs: any[],
   ): ITreeNode[] => {
-    const columns = [this.props.metadataColumn1, this.props.metadataColumn2, this.props.metadataColumn3].filter(Boolean);
-    if (currentLevel > columns.length) return this.getDocumentsInThisScope(docs);
+    const columns = [
+      this.props.metadataColumn1,
+      this.props.metadataColumn2,
+      this.props.metadataColumn3,
+    ].filter(Boolean);
+    if (currentLevel > columns.length)
+      return this.getDocumentsInThisScope(docs);
 
     const col = columns[currentLevel - 1];
     if (!col) return [];
     const colStr: string = String(col);
 
     const unique = new Set<string>();
-    docs.forEach(doc => {
+    docs.forEach((doc) => {
       const val = this.getFieldValue(doc, col);
       if (val) unique.add(String(val));
     });
 
-    return Array.from(unique).sort().map(value => ({
-      key: `${colStr}-${value}-${currentLevel}-${this.buildFilterQueryForItems([...currentFilters, { column: colStr, value }])}`,
-      label: this.getLabelWithOptionalId(colStr, value, docs),
-      icon: "Tag",
-      isFolder: true,
-      level: currentLevel,
-      columnInternalName: colStr,
-      columnValue: value,
-      children: [],
-      isExpanded: false,
-      isClicked: false,
-      filterQuery: this.buildFilterQueryForItems([...currentFilters, { column: colStr, value }])
-    }));
-
+    return Array.from(unique)
+      .sort()
+      .map((value) => ({
+        key: `${colStr}-${value}-${currentLevel}-${this.buildFilterQueryForItems([...currentFilters, { column: colStr, value }])}`,
+        label: this.getLabelWithOptionalId(colStr, value, docs),
+        icon: "Tag",
+        isFolder: true,
+        level: currentLevel,
+        columnInternalName: colStr,
+        columnValue: value,
+        children: [],
+        isExpanded: false,
+        isClicked: false,
+        filterQuery: this.buildFilterQueryForItems([
+          ...currentFilters,
+          { column: colStr, value },
+        ]),
+      }));
   };
 
   private getFieldValue = (item: any, name: string): any => {
@@ -697,19 +878,43 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     let val = item[name];
 
     if (val !== undefined) {
-      if (typeof val === "object" && val !== null && name === "aplicacaoNormativo") {
+      if (
+        typeof val === "object" &&
+        val !== null &&
+        name === "aplicacaoNormativo"
+      ) {
         const lang = (getUserLanguage() || "pt").toLowerCase();
-        const display =
-          lang.startsWith("es")
-            ? (val.DescTipoAplicacaoES ?? val.DescTipoAplicacaoPT ?? val.Title ?? val.Label ?? val.LookupValue ?? val.Sigla ?? "")
-            : (val.DescTipoAplicacaoPT ?? val.DescTipoAplicacaoES ?? val.Title ?? val.Label ?? val.LookupValue ?? val.Sigla ?? "");
+        const display = lang.startsWith("es")
+          ? (val.DescTipoAplicacaoES ??
+            val.DescTipoAplicacaoPT ??
+            val.Title ??
+            val.Label ??
+            val.LookupValue ??
+            val.Sigla ??
+            "")
+          : (val.DescTipoAplicacaoPT ??
+            val.DescTipoAplicacaoES ??
+            val.Title ??
+            val.Label ??
+            val.LookupValue ??
+            val.Sigla ??
+            "");
         return display;
       }
 
       if (typeof val === "object" && val !== null) {
         if (Array.isArray(val)) {
           return val
-            .map(v => v?.Title ?? v?.Label ?? v?.LookupValue ?? v?.Sigla ?? v?.DescTipoAplicacaoPT ?? v?.DescTipoAplicacaoES ?? String(v))
+            .map(
+              (v) =>
+                v?.Title ??
+                v?.Label ??
+                v?.LookupValue ??
+                v?.Sigla ??
+                v?.DescTipoAplicacaoPT ??
+                v?.DescTipoAplicacaoES ??
+                String(v),
+            )
             .join("; ");
         }
         return (
@@ -732,12 +937,14 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     if (name.includes("/")) {
       const [base, prop] = name.split("/");
-      return item[base]?.[prop] ??
+      return (
+        item[base]?.[prop] ??
         item[base]?.Title ??
         item[base]?.Label ??
         item[base]?.LookupValue ??
         item[base]?.Sigla ??
-        "";
+        ""
+      );
     }
 
     if (name === "ID") {
@@ -752,7 +959,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       const li = item.ListItemAllFields[name];
       if (typeof li === "object" && li !== null) {
         if (Array.isArray(li)) {
-          return li.map(v => v?.Title ?? v?.Label ?? v?.LookupValue ?? String(v)).join("; ");
+          return li
+            .map((v) => v?.Title ?? v?.Label ?? v?.LookupValue ?? String(v))
+            .join("; ");
         }
         return li.Title ?? li.Label ?? li.LookupValue ?? "";
       }
@@ -766,19 +975,27 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     }
 
     return "";
-  }
+  };
 
-  private buildFilterQueryForItems = (filters: { column: string; value: string }[]): string =>
-    filters.map(f => `${f.column} eq '${f.value.replace(/'/g, "''")}'`).join(" and ");
+  private buildFilterQueryForItems = (
+    filters: { column: string; value: string }[],
+  ): string =>
+    filters
+      .map((f) => `${f.column} eq '${f.value.replace(/'/g, "''")}'`)
+      .join(" and ");
 
   private getColumnForLevel = (level: number): string | undefined => {
     switch (level) {
-      case 1: return this.props.metadataColumn1;
-      case 2: return this.props.metadataColumn2;
-      case 3: return this.props.metadataColumn3;
-      default: return undefined;
+      case 1:
+        return this.props.metadataColumn1;
+      case 2:
+        return this.props.metadataColumn2;
+      case 3:
+        return this.props.metadataColumn3;
+      default:
+        return undefined;
     }
-  }
+  };
 
   private async handleExpandClick(node: ITreeNode): Promise<void> {
     if (!node.isFolder) {
@@ -788,48 +1005,54 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     // Armazena a lista de chaves expandidas antes de fazer a alteração.
     const currentExpandedKeys = this.findExpandedKeys(this.state.treeData);
 
-    this.setState(prev => ({
-      treeData: this.toggleNodeExpansion(prev.treeData, node.key),
-      expandedKeys: currentExpandedKeys
-    }), async () => {
-      const updated = this.findNodeInTree(this.state.treeData, node.key);
-      if (updated && updated.isExpanded && updated.children?.length === 0) {
-        this.setState({ loading: true });
+    this.setState(
+      (prev) => ({
+        treeData: this.toggleNodeExpansion(prev.treeData, node.key),
+        expandedKeys: currentExpandedKeys,
+      }),
+      async () => {
+        const updated = this.findNodeInTree(this.state.treeData, node.key);
+        if (updated && updated.isExpanded && updated.children?.length === 0) {
+          this.setState({ loading: true });
 
-        const nextLevel = updated.level + 1;
-        const column = this.getColumnForLevel(nextLevel);
+          const nextLevel = updated.level + 1;
+          const column = this.getColumnForLevel(nextLevel);
 
-        const filters = updated.filterQuery?.split(" and ").map(f => {
-          const [col, val] = f.split(" eq ");
-          if (val === undefined || val === null) {
-            this.setState({
-              error: "O metadado selecionado para compor o menu ainda não possui nenhum valor. É necessário que o metadado selecionado possua valor em algum documento.",
-              loading: false // SNO365-133
-            });
-          }
-          return { column: col, value: (val || "").replace(/'/g, "") };
-        }) ?? [];
+          const filters =
+            updated.filterQuery?.split(" and ").map((f) => {
+              const [col, val] = f.split(" eq ");
+              if (val === undefined || val === null) {
+                this.setState({
+                  error:
+                    "O metadado selecionado para compor o menu ainda não possui nenhum valor. É necessário que o metadado selecionado possua valor em algum documento.",
+                  loading: false, // SNO365-133
+                });
+              }
+              return { column: col, value: (val || "").replace(/'/g, "") };
+            }) ?? [];
 
-        const scopedDocs = this.state.allDocumentsCache.filter(doc =>
-          filters.every(f => String(this.getFieldValue(doc, f.column)) === f.value)
-        );
+          const scopedDocs = this.state.allDocumentsCache.filter((doc) =>
+            filters.every(
+              (f) => String(this.getFieldValue(doc, f.column)) === f.value,
+            ),
+          );
 
-        const children = column
-          ? this.buildMetadataTreeLevel(nextLevel, filters, scopedDocs)
-          : this.getDocumentsInThisScope(scopedDocs);
+          const children = column
+            ? this.buildMetadataTreeLevel(nextLevel, filters, scopedDocs)
+            : this.getDocumentsInThisScope(scopedDocs);
 
-        this.setState(prev => ({
-          treeData: this.addChildrenToNode(prev.treeData, node.key, children),
-          loading: false
-        }));
-      }
-    });
+          this.setState((prev) => ({
+            treeData: this.addChildrenToNode(prev.treeData, node.key, children),
+            loading: false,
+          }));
+        }
+      },
+    );
   }
 
   private async handleNodeClick(node: ITreeNode): Promise<void> {
-
     if (!node.isFolder) {
-      if (node.url) window.open(node.url, '_blank');
+      if (node.url) window.open(node.url, "_blank");
       return;
     }
 
@@ -864,8 +1087,9 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     if (!urlClean) {
       this.setState({
-        error: "A URL da biblioteca ou View não pôde ser identificada corretamente.",
-        loading: false
+        error:
+          "A URL da biblioteca ou View não pôde ser identificada corretamente.",
+        loading: false,
       });
       return ""; //SNO365-133
     }
@@ -882,8 +1106,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           let filterValue = currentPathNode.columnValue;
 
           if (currentPathNode.columnInternalName === "aplicacaoNormativo") {
-            const docMatch = this.state.allDocumentsCache
-              .find(doc => this.getFieldValue(doc, currentPathNode.columnInternalName) === currentPathNode.columnValue);
+            const docMatch = this.state.allDocumentsCache.find(
+              (doc) =>
+                this.getFieldValue(doc, currentPathNode.columnInternalName) ===
+                currentPathNode.columnValue,
+            );
 
             const val = docMatch ? docMatch["aplicacaoNormativo"] : null;
             if (val && val.Id) filterValue = val.Id;
@@ -893,29 +1120,37 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
           filterParams.push(
             `FilterField${filterCount}=${encodeURIComponent(filterField)}`,
             `FilterValue${filterCount}=${encodeURIComponent(filterValue)}`,
-            `FilterType${filterCount}=Lookup`
+            `FilterType${filterCount}=Lookup`,
           );
           filterCount++;
         }
       }
     }
 
-    const filtersQuery = filterParams.length > 0 ? `?${filterParams.join("&")}` : "";
+    const filtersQuery =
+      filterParams.length > 0 ? `?${filterParams.join("&")}` : "";
 
     const separator = urlClean.includes("?") ? "&" : "?";
 
-    const finalQuery = filtersQuery.startsWith("?") ? filtersQuery.substring(1) : filtersQuery;
+    const finalQuery = filtersQuery.startsWith("?")
+      ? filtersQuery.substring(1)
+      : filtersQuery;
 
-    const fullUrl = filterParams.length > 0
-      ? `${urlClean}${separator}${finalQuery}`
-      : urlClean;
+    const fullUrl =
+      filterParams.length > 0
+        ? `${urlClean}${separator}${finalQuery}`
+        : urlClean;
 
     console.log("URL Final gerada para o Iframe:", fullUrl);
     return fullUrl;
   }
 
   // Método auxiliar para encontrar a trilha raiz dos nós da hierarquia, fundamental para fazer a URL do iframe retornar os filtros concatenados.
-  private findNodePath = (nodes: ITreeNode[], key: string, path: ITreeNode[] = []): ITreeNode[] | undefined => {
+  private findNodePath = (
+    nodes: ITreeNode[],
+    key: string,
+    path: ITreeNode[] = [],
+  ): ITreeNode[] | undefined => {
     for (const n of nodes) {
       const newPath = [...path, n];
       if (n.key === key) {
@@ -929,51 +1164,84 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
       }
     }
     return undefined;
-  }
+  };
 
-  private toggleNodeExpansion = (nodes: ITreeNode[], key: string): ITreeNode[] =>
-    nodes.map(n => ({
+  private toggleNodeExpansion = (
+    nodes: ITreeNode[],
+    key: string,
+  ): ITreeNode[] =>
+    nodes.map((n) => ({
       ...n,
-      children: n.children ? this.toggleNodeExpansion(n.children, key) : n.children,
-      isExpanded: n.key === key ? !n.isExpanded : n.isExpanded
+      children: n.children
+        ? this.toggleNodeExpansion(n.children, key)
+        : n.children,
+      isExpanded: n.key === key ? !n.isExpanded : n.isExpanded,
     }));
 
-  private addChildrenToNode = (nodes: ITreeNode[], key: string, children: ITreeNode[]): ITreeNode[] =>
-    nodes.map(n => ({
+  private addChildrenToNode = (
+    nodes: ITreeNode[],
+    key: string,
+    children: ITreeNode[],
+  ): ITreeNode[] =>
+    nodes.map((n) => ({
       ...n,
-      children: n.key === key ? children : n.children ? this.addChildrenToNode(n.children, key, children) : n.children
+      children:
+        n.key === key
+          ? children
+          : n.children
+            ? this.addChildrenToNode(n.children, key, children)
+            : n.children,
     }));
 
-  private findNodeInTree = (nodes: ITreeNode[], key: string): ITreeNode | undefined => {
+  private findNodeInTree = (
+    nodes: ITreeNode[],
+    key: string,
+  ): ITreeNode | undefined => {
     for (const n of nodes) {
       if (n.key === key) return n;
       const found = this.findNodeInTree(n.children ?? [], key);
       if (found) return found;
     }
     return undefined;
-  }
+  };
 
   private getFileIcon = (name: string): string => {
-    const ext = name.split('.').pop()?.toLowerCase();
+    const ext = name.split(".").pop()?.toLowerCase();
     switch (ext) {
-      case 'doc': case 'docx': return 'WordDocument';
-      case 'xls': case 'xlsx': return 'ExcelDocument';
-      case 'ppt': case 'pptx': return 'PowerPointDocument';
-      case 'pdf': return 'PDF';
-      case 'jpg': case 'jpeg': case 'png': case 'gif': return 'Photo2';
-      case 'zip': case 'txt': return 'TextDocument';
-      default: return 'Document';
+      case "doc":
+      case "docx":
+        return "WordDocument";
+      case "xls":
+      case "xlsx":
+        return "ExcelDocument";
+      case "ppt":
+      case "pptx":
+        return "PowerPointDocument";
+      case "pdf":
+        return "PDF";
+      case "jpg":
+      case "jpeg":
+      case "png":
+      case "gif":
+        return "Photo2";
+      case "zip":
+      case "txt":
+        return "TextDocument";
+      default:
+        return "Document";
     }
-  }
+  };
 
   private getFriendlyColumnValue = (val: string, name: string): string => {
     if (name.toLowerCase().includes("date")) {
       try {
         return new Date(val).toLocaleDateString();
-      } catch { return val; }
+      } catch {
+        return val;
+      }
     }
     return val;
-  }
+  };
 
   /**
    * Formata o ID com zero à esquerda para no mínimo 2 dígitos.
@@ -1001,9 +1269,15 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     // Caso 2: Array (multi-lookup/managed metadata multi)
     if (Array.isArray(raw)) {
       // Procura o item do array cujo "Title/Label/LookupValue/Sigla/Desc*" bate com o 'value'
-      const hit = raw.find(v => {
+      const hit = raw.find((v) => {
         const display =
-          v?.Title ?? v?.Label ?? v?.LookupValue ?? v?.Sigla ?? v?.DescTipoAplicacaoPT ?? v?.DescTipoAplicacaoES ?? String(v);
+          v?.Title ??
+          v?.Label ??
+          v?.LookupValue ??
+          v?.Sigla ??
+          v?.DescTipoAplicacaoPT ??
+          v?.DescTipoAplicacaoES ??
+          String(v);
         return String(display) === String(value);
       });
       if (hit) {
@@ -1033,12 +1307,18 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
     return null;
   }
 
-  private getIdForColumnValue(col: string, value: string, docs: any[]): string | null {
+  private getIdForColumnValue(
+    col: string,
+    value: string,
+    docs: any[],
+  ): string | null {
     if (!col || !value) return null;
 
     if (col !== "aplicacaoNormativo") return null;
 
-    const match = docs.find(doc => String(this.getFieldValue(doc, col)) === String(value));
+    const match = docs.find(
+      (doc) => String(this.getFieldValue(doc, col)) === String(value),
+    );
     if (!match) return null;
 
     if (match[col]?.Id) {
@@ -1058,7 +1338,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     if (col.endsWith("Id") && String(col) !== "ID") {
       const idVal = match[col];
-      if (idVal !== undefined && idVal !== null && String(this.getFieldValue(match, col.slice(0, -2))) === String(value)) {
+      if (
+        idVal !== undefined &&
+        idVal !== null &&
+        String(this.getFieldValue(match, col.slice(0, -2))) === String(value)
+      ) {
         return String(idVal);
       }
     }
@@ -1076,7 +1360,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   /**
    * Monta o rótulo que será exibido na árvore: "ID - ValorAmigável" se houver ID, senão "ValorAmigável".
    */
-  private getLabelWithOptionalId(col: string, rawValue: string, docsInScope: any[]): string {
+  private getLabelWithOptionalId(
+    col: string,
+    rawValue: string,
+    docsInScope: any[],
+  ): string {
     const friendly = this.getFriendlyColumnValue(rawValue, col);
 
     if (col === "aplicacaoNormativo") {
@@ -1091,38 +1379,45 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
   }
 
   public render(): React.ReactElement<ITreeViewProps> {
-    const { loading, error, treeData, iframeUrl, selectedKey, isRefreshing } = this.state;
+    const { loading, error, treeData, iframeUrl, selectedKey, isRefreshing } =
+      this.state;
     const { onForceRefresh, selectedLibraryUrl } = this.props;
 
     const lang = (getUserLanguage() || "pt").toLowerCase();
-    const newTitle =
-      lang.startsWith("es")
-        ? (this.props.customLibraryTitleES?.trim() || "")
-        : (this.props.customLibraryTitlePT?.trim() || "");
+    const newTitle = lang.startsWith("es")
+      ? this.props.customLibraryTitleES?.trim() || ""
+      : this.props.customLibraryTitlePT?.trim() || "";
 
     let processedTreeData = treeData;
 
     if (treeData.length > 0 && newTitle) {
       processedTreeData = [
         { ...treeData[0], label: newTitle },
-        ...treeData.slice(1)
+        ...treeData.slice(1),
       ];
     }
 
     const renderTreeNodes = (nodes: ITreeNode[]) => (
       <ul className={styles.treeList}>
-        {nodes.map(node => (
+        {nodes.map((node) => (
           <li key={node.key} className={styles.treeNode}>
             <div className={styles.nodeContent}>
               {node.isFolder && (
-                <span className={styles.expanderIcon} onClick={() => this.handleExpandClick(node)}>
+                <span
+                  className={styles.expanderIcon}
+                  onClick={() => this.handleExpandClick(node)}
+                >
                   {node.isExpanded ? "▼" : "►"}
                 </span>
               )}
               <Icon iconName={node.icon} style={{ marginRight: 5 }} />
               <span
                 onClick={() => this.handleNodeClick(node)}
-                className={node.key === selectedKey ? styles.selectedNodeLabel : undefined}
+                className={
+                  node.key === selectedKey
+                    ? styles.selectedNodeLabel
+                    : undefined
+                }
               >
                 {escape(node.label)}
               </span>
@@ -1131,7 +1426,11 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
               <div className={styles.childrenContainer}>
                 {node.children?.length
                   ? renderTreeNodes(node.children)
-                  : (loading || isRefreshing) && <div className={styles.loadingIndicator}>Carregando...</div>}
+                  : (loading || isRefreshing) && (
+                      <div className={styles.loadingIndicator}>
+                        Carregando...
+                      </div>
+                    )}
               </div>
             )}
           </li>
@@ -1143,16 +1442,27 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
 
     if (isMissingLibraryConfig && !isRefreshing) {
       return (
-        <div className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`} style={{ minHeight: '100px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <p style={{ color: 'red', textAlign: 'center' }}>
-            {t.noLibrary || "Por favor, abra as configurações da Web Part e selecione uma biblioteca de documentos."}
+        <div
+          className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`}
+          style={{
+            minHeight: "100px",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <p style={{ color: "red", textAlign: "center" }}>
+            {t.noLibrary ||
+              "Por favor, abra as configurações da Web Part e selecione uma biblioteca de documentos."}
           </p>
         </div>
       );
     }
 
     return (
-      <section className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`}>
+      <section
+        className={`${styles.treeViewContainer} ${this.props.hasTeamsContext}`}
+      >
         <SplitterLayout
           percentage
           primaryIndex={1}
@@ -1165,35 +1475,49 @@ export default class TreeView extends React.Component<ITreeViewProps, IComponent
             {/* Overlay de refresh só sobre o menu */}
             {isRefreshing && (
               <div className={styles.refreshOverlay}>
-                <Spinner size={SpinnerSize.large} label={t.reloading || "Atualizando dados da biblioteca..."} />
-                <p style={{ marginTop: '10px' }}>Por favor, aguarde.</p>
+                <Spinner
+                  size={SpinnerSize.large}
+                  label={t.reloading || "Atualizando dados da biblioteca..."}
+                />
+                <p style={{ marginTop: "10px" }}>Por favor, aguarde.</p>
               </div>
             )}
 
             {/* Botão de atualização visível */}
             {onForceRefresh && selectedLibraryUrl && (
-              <div style={{ padding: '5px 10px 10px 10px' }}>
+              <div style={{ padding: "5px 10px 10px 10px" }}>
                 <PrimaryButton
                   onClick={this.handleForceRefresh}
                   text={t.reloadContents || "Atualizar Dados"}
                   disabled={loading || isRefreshing}
-                  iconProps={{ iconName: 'Refresh' }}
-                  styles={{ root: { width: '100%' } }}
+                  iconProps={{ iconName: "Refresh" }}
+                  styles={{ root: { width: "100%" } }}
                 />
               </div>
             )}
 
             <div className={styles.treeContainer}>
               {loading && treeData.length === 0 && <p>{t.loading}</p>}
-              {error && <p style={{ color: 'red' }}>{error}</p>}
+              {error && <p style={{ color: "red" }}>{error}</p>}
               {!loading && !error && treeData.length === 0 && (
-                <p>{(!this.props.metadataColumn1 && !this.props.metadataColumn2 && !this.props.metadataColumn3)
-                  ? t.noMetadata
-                  : t.noDocuments}</p>
+                <p>
+                  {!this.props.metadataColumn1 &&
+                  !this.props.metadataColumn2 &&
+                  !this.props.metadataColumn3
+                    ? t.noMetadata
+                    : t.noDocuments}
+                </p>
               )}
-              {!error && treeData.length > 0 && renderTreeNodes(processedTreeData)}
+              {!error &&
+                treeData.length > 0 &&
+                renderTreeNodes(processedTreeData)}
               {loading && treeData.length > 0 && (
-                <div className={styles.loadingIndicator} style={{ padding: '10px' }}>Carregando dados...</div>
+                <div
+                  className={styles.loadingIndicator}
+                  style={{ padding: "10px" }}
+                >
+                  Carregando dados...
+                </div>
               )}
             </div>
           </div>
